@@ -17,7 +17,7 @@ _ICON = {
 
 
 def to_markdown(outcome: Outcome, auth: Authorization, *, target: str, model: str,
-                product: str) -> str:
+                product: str, fixes: list[dict] | None = None) -> str:
     findings = sorted(outcome.findings, key=lambda f: -f.severity.rank)
     lines: list[str] = []
     lines.append(f"# {product} — security assessment")
@@ -44,12 +44,14 @@ def to_markdown(outcome: Outcome, auth: Authorization, *, target: str, model: st
         lines.append("No vulnerabilities were reproduced in this run. Note that a clean run "
                      "is evidence, not proof of absence — it means the agent could not prove "
                      "an exploit within its budget, not that none exists.")
+        lines.extend(_fixes_section(fixes))
         return "\n".join(lines)
 
     lines.append("## Findings")
     lines.append("")
     for i, f in enumerate(findings, 1):
         lines.extend(_finding_block(i, f))
+    lines.extend(_fixes_section(fixes))
     return "\n".join(lines)
 
 
@@ -66,4 +68,18 @@ def _finding_block(i: int, f: Finding) -> list[str]:
         out += ["**Remediation:**", "", f.remediation, ""]
     out.append("---")
     out.append("")
+    return out
+
+
+def _fixes_section(fixes: list[dict] | None) -> list[str]:
+    if not fixes:
+        return []
+    out = ["", "## Suggested fixes", "",
+           "Each patch below was verified to apply cleanly to the source at scan time."]
+    for i, fx in enumerate(fixes, 1):
+        out += ["", f"### Fix {i}: {fx.get('file', '')}", ""]
+        if fx.get("explanation"):
+            out.append(fx["explanation"])
+            out.append("")
+        out += ["```diff", fx.get("diff", "").strip(), "```"]
     return out

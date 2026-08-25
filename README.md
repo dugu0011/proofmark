@@ -105,7 +105,7 @@ Early, but it tests **live URLs and code** already.
 - [x] Recon: crawl, extract forms/params, probe common paths
 - [x] Intercept proxy: capture / mutate / replay requests
 - [x] Signed, verifiable, replayable run records
-- [ ] One-click autofix in the report
+- [x] Verified autofix — the agent writes the patch, Proofmark checks it applies
 - [ ] Headless browser (XSS/CSRF/DOM)
 - [ ] A graph of agents (recon → exploit)
 

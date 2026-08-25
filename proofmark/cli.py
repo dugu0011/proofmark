@@ -25,6 +25,7 @@ from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
+    ProposeFixTool, FixLog,
 )
 from proofmark.http_client import HttpClient, RequestLog, Request
 from proofmark import audit
@@ -98,6 +99,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
         _fail(f"The model '{model}' needs {missing} in your environment. Set it and retry.")
 
     steps: list[dict] = []
+    fix_log = FixLog()
     def _record(event: Event) -> None:
         steps.append({"kind": event.kind, "text": event.text, "detail": event.detail})
         _render(event)
@@ -130,7 +132,8 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
                     RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
-                    ListRequestsTool(client), ReplayRequestTool(client), RecordFindingTool(),
+                    ListRequestsTool(client), ReplayRequestTool(client),
+                    ProposeFixTool(sandbox, fix_log), RecordFindingTool(),
                 ]
                 suffix = code_mode_note()
             else:
@@ -157,7 +160,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
         if source is not None:
             source.dispose()
 
-    report = to_markdown(outcome, auth, target=target, model=model, product=NAME)
+    report = to_markdown(outcome, auth, target=target, model=model, product=NAME, fixes=fix_log.fixes)
     click.echo("")
     n = len(outcome.findings)
     colour = C["yellow"] if n else C["green"]
@@ -175,7 +178,10 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
             "remediation": f.remediation,
         } for f in outcome.findings],
     )
+    record.fixes = fix_log.fixes
     out_dir = audit.save(record, run_dir)
+    for i, fx in enumerate(fix_log.fixes, 1):
+        (out_dir / f"fix-{i}.patch").write_text(fx["diff"] + "\n", encoding="utf-8")
     (out_dir / "report.md").write_text(report, encoding="utf-8")
     signed = "signed" if __import__("os").environ.get(audit.SIGNING_KEY_ENV) else "unsigned"
     click.echo(f"{C['dim']}run record ({signed}, verifiable) → {out_dir}{C['reset']}")

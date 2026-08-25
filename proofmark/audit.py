@@ -52,6 +52,7 @@ class RunRecord:
     steps: list[dict] = field(default_factory=list)      # {i, kind, text, detail}
     requests: list[dict] = field(default_factory=list)   # {method, url, status, error}
     findings: list[dict] = field(default_factory=list)
+    fixes: list[dict] = field(default_factory=list)      # {file, diff, explanation}
 
     def chained_steps(self) -> list[dict]:
         """Steps with a hash chain over them."""
@@ -73,6 +74,7 @@ class RunRecord:
             "started_at": self.started_at, "finished_at": self.finished_at,
             "stopped_reason": self.stopped_reason,
             "steps": steps, "requests": self.requests, "findings": self.findings,
+            "fixes": self.fixes,
             "chain_tip": steps[-1]["hash"] if steps else GENESIS,
         }
         key = os.environ.get(SIGNING_KEY_ENV)
