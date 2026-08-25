@@ -88,7 +88,7 @@ def main(ctx: click.Context) -> None:
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
-def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, strategy, max_steps, time_budget, output, run_dir):
+def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, strategy, max_steps, time_budget, output, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model, api_base=api_base,
@@ -199,7 +199,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
                 ]
                 coordinator = Coordinator(
                     llm, auth, name=NAME, phases=phases, blackboard=blackboard,
-                    time_budget_seconds=time_budget, on_event=_record,
+                    time_budget_seconds=time_budget, on_event=_record, steer_fn=_pull_steer,
                 )
                 outcome = coordinator.run(run_target, cfg.kind)
             else:
@@ -208,6 +208,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
                     llm, build_registry(tools), auth,
                     name=NAME, system_suffix=suffix,
                     max_steps=max_steps, time_budget_seconds=time_budget, on_event=_record,
+                    steer_fn=_pull_steer,
                 )
                 outcome = agent.run(run_target, cfg.kind)
             finished_at = datetime.now(timezone.utc).isoformat()
@@ -217,6 +218,9 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
     finally:
         if source is not None:
             source.dispose()
+
+    if _events_fh is not None:
+        _events_fh.close()
 
     report = to_markdown(outcome, auth, target=target, model=model, product=NAME, fixes=fix_log.fixes)
     click.echo("")

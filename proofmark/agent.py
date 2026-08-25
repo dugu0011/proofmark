@@ -67,6 +67,7 @@ class Agent:
         max_steps: int = 40,
         time_budget_seconds: int = 600,
         on_event: Callable[[Event], None] | None = None,
+        steer_fn: Callable[[], list[str]] | None = None,
     ) -> None:
         self._llm = llm
         self._registry = registry
@@ -76,6 +77,7 @@ class Agent:
         self._max_steps = max_steps
         self._deadline = time.time() + time_budget_seconds
         self._emit = on_event or (lambda e: None)
+        self._steer = steer_fn or (lambda: [])
 
     def run(self, target: str, kind: str) -> Outcome:
         system = system_prompt(self._name, self._auth)
@@ -94,6 +96,19 @@ class Agent:
                 outcome.stopped_reason = "time budget exhausted"
                 self._emit(Event("done", "Stopping: time budget reached."))
                 break
+
+            # Operator steering: instructions pushed in mid-run are injected as
+            # user turns the agent must act on next. This is what lets a human
+            # redirect a live run instead of only watching it.
+            for instruction in (self._steer() or []):
+                instruction = str(instruction).strip()
+                if not instruction:
+                    continue
+                messages.append({
+                    "role": "user",
+                    "content": f"OPERATOR INSTRUCTION (act on this now): {instruction}",
+                })
+                self._emit(Event("steer", instruction))
 
             try:
                 reply = self._llm.complete(messages, tools)

@@ -71,3 +71,77 @@ def test_the_recon_agent_is_told_not_to_exploit():
                         blackboard=bb)
     coord.run("https://app.test", "url")
     assert "DO NOT try to exploit" in llm.systems_seen[0]
+
+
+# --------------------------------------------------------------------------- steering
+
+
+def test_steering_instructions_are_injected_as_user_turns():
+    """An instruction pushed mid-run becomes a user message the agent must act on."""
+    import json
+    from proofmark.agent import Agent
+    from proofmark.authorization import Authorization
+    from proofmark.tools.base import ToolRegistry
+    from proofmark.tools.record_finding import RecordFindingTool
+
+    auth = Authorization.grant("https://app.test", "tester")
+
+    # Feed one steering instruction before the second step.
+    pending = [["focus on /admin now"]]
+    def steer():
+        return pending.pop(0) if pending else []
+
+    seen_user_turns = []
+    class LLM:
+        def __init__(self): self.n = 0
+        def complete(self, messages, tools):
+            from proofmark.llm import Completion
+            # capture any operator-instruction user turns
+            for m in messages:
+                if m.get("role") == "user" and "OPERATOR INSTRUCTION" in str(m.get("content", "")):
+                    seen_user_turns.append(m["content"])
+            self.n += 1
+            if self.n == 1:
+                return Completion("", [], {"role": "assistant", "content": ""})  # no tool -> nudge
+            return Completion("", [{"id": "c", "name": "finish",
+                                    "arguments": json.dumps({"summary": "done"})}],
+                              {"role": "assistant", "content": ""})
+
+    agent = Agent(LLM(), ToolRegistry([RecordFindingTool()]), auth, name="Proofmark",
+                  max_steps=5, steer_fn=steer)
+    agent.run("https://app.test", "url")
+
+    assert any("focus on /admin now" in t for t in seen_user_turns)
+
+
+def test_events_and_control_files_round_trip(tmp_path):
+    """The CLI's live plumbing: events append as JSONL, control lines are read once."""
+    import json
+    events = tmp_path / "events.jsonl"
+    control = tmp_path / "control.txt"
+
+    # emulate the CLI's two closures
+    fh = open(events, "a", encoding="utf-8")
+    def record(kind, text, detail=""):
+        fh.write(json.dumps({"kind": kind, "text": text, "detail": detail}) + "\n"); fh.flush()
+
+    pos = {"n": 0}
+    def pull():
+        try:
+            lines = control.read_text().splitlines()
+        except OSError:
+            return []
+        new = lines[pos["n"]:]; pos["n"] = len(lines)
+        return [l for l in new if l.strip()]
+
+    record("action", "http_request", "GET /x")
+    control.write_text("look at the login form\n")
+    first = pull()
+    control.write_text("look at the login form\nnow try SQLi\n")
+    second = pull()
+    fh.close()
+
+    assert first == ["look at the login form"]
+    assert second == ["now try SQLi"]      # only the newly-appended line, read once
+    rows = [json.loads(l) for l in events.read_text().splitlines()]
+    assert rows[0]["kind"] == "action" and rows[0]["detail"] == "GET /x"

@@ -43,6 +43,7 @@ class Coordinator:
         blackboard: Blackboard,
         time_budget_seconds: int = 900,
         on_event: Callable[[Event], None] | None = None,
+        steer_fn: Callable[[], list[str]] | None = None,
     ) -> None:
         self._llm = llm
         self._auth = authorization
@@ -51,6 +52,7 @@ class Coordinator:
         self._bb = blackboard
         self._deadline = time.time() + time_budget_seconds
         self._emit = on_event or (lambda e: None)
+        self._steer = steer_fn
 
     def run(self, target: str, kind: str) -> Outcome:
         total_steps = 0
@@ -72,7 +74,7 @@ class Coordinator:
                 self._llm, ToolRegistry(phase.tools), self._auth,
                 name=f"{self._name}:{phase.name}",
                 system_suffix=suffix, max_steps=phase.max_steps,
-                time_budget_seconds=remaining, on_event=self._emit,
+                time_budget_seconds=remaining, on_event=self._emit, steer_fn=self._steer,
             )
             outcome = agent.run(target, kind)
             total_steps += outcome.steps_used
