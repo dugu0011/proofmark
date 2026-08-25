@@ -117,6 +117,7 @@ Early, but it tests **live URLs and code** already.
 - [ ] Fix suggestions in the report
 - [x] A packaged GitHub Action — `uses: dugu0011/proofmark@v1`
 - [x] Recon: crawl, extract forms/params, probe common paths
+- [x] Passive subdomain OSINT (Certificate Transparency), scope-respecting
 - [x] Intercept proxy: capture / mutate / replay requests
 - [x] Signed, verifiable, replayable run records
 - [x] Verified autofix — the agent writes the patch, Proofmark checks it applies

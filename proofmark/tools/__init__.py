@@ -7,11 +7,12 @@ from proofmark.tools.recon_tool import ReconTool
 from proofmark.tools.fix_tool import ProposeFixTool, FixLog
 from proofmark.tools.browser_tool import BrowserTool
 from proofmark.tools.note_tool import NoteTool
+from proofmark.tools.subdomains_tool import SubdomainTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
     "HttpRequestTool", "ListRequestsTool", "ReplayRequestTool",
     "RunCommandTool", "RecordFindingTool",
     "ListFilesTool", "ReadFileTool", "SearchCodeTool", "ReconTool",
-    "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool",
+    "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool", "SubdomainTool",
 ]

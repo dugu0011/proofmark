@@ -25,7 +25,7 @@ from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
-    ProposeFixTool, FixLog, BrowserTool, NoteTool,
+    ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -168,8 +168,9 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
             else:
                 client = HttpClient(sandbox, auth, req_log)
                 tools = [
-                    ReconTool(client), HttpRequestTool(client), ListRequestsTool(client),
-                    ReplayRequestTool(client), RunCommandTool(sandbox), browser, RecordFindingTool(),
+                    ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
+                    ListRequestsTool(client), ReplayRequestTool(client), RunCommandTool(sandbox),
+                    browser, RecordFindingTool(),
                 ]
                 suffix = spec_briefing
 
@@ -180,8 +181,8 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
                 click.echo(f"{C['dim']}─ graph of agents: recon → exploit ─{C['reset']}")
                 blackboard = Blackboard()
                 recon_tools = [
-                    ReconTool(client), HttpRequestTool(client), ListRequestsTool(client),
-                    RunCommandTool(sandbox), NoteTool(blackboard),
+                    ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
+                    ListRequestsTool(client), RunCommandTool(sandbox), NoteTool(blackboard),
                 ]
                 if is_code:
                     recon_tools = [
