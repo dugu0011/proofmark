@@ -3,10 +3,11 @@ from proofmark.tools.http_tools import HttpRequestTool, ListRequestsTool, Replay
 from proofmark.tools.record_finding import RecordFindingTool
 from proofmark.tools.run_command import RunCommandTool
 from proofmark.tools.code_tools import ListFilesTool, ReadFileTool, SearchCodeTool
+from proofmark.tools.recon_tool import ReconTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
     "HttpRequestTool", "ListRequestsTool", "ReplayRequestTool",
     "RunCommandTool", "RecordFindingTool",
-    "ListFilesTool", "ReadFileTool", "SearchCodeTool",
+    "ListFilesTool", "ReadFileTool", "SearchCodeTool", "ReconTool",
 ]

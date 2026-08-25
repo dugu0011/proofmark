@@ -22,8 +22,8 @@ from proofmark.llm import LLM
 from proofmark.report import to_markdown
 from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
-    HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, RecordFindingTool,
-    ReplayRequestTool, RunCommandTool, SearchCodeTool,
+    HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
+    RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
 )
 from proofmark.http_client import HttpClient, RequestLog
 from proofmark.source import prepare as prepare_source, SourceError
@@ -120,15 +120,15 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
                 client = HttpClient(sandbox, auth, RequestLog())
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
-                    RunCommandTool(sandbox), HttpRequestTool(client),
+                    RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), RecordFindingTool(),
                 ]
                 suffix = code_mode_note()
             else:
                 client = HttpClient(sandbox, auth, RequestLog())
                 tools = [
-                    HttpRequestTool(client), ListRequestsTool(client), ReplayRequestTool(client),
-                    RunCommandTool(sandbox), RecordFindingTool(),
+                    ReconTool(client), HttpRequestTool(client), ListRequestsTool(client),
+                    ReplayRequestTool(client), RunCommandTool(sandbox), RecordFindingTool(),
                 ]
                 suffix = ""
 

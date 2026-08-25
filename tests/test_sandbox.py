@@ -107,3 +107,17 @@ def test_replay_out_of_scope_is_still_refused():
         client.send(Request("GET", "https://api.github.com/zen"))
         out = ReplayRequestTool(client).run(index=0, url="https://evil.test/x")
         assert out.is_error and "outside the authorized scope" in out.output
+
+
+def test_recon_maps_a_live_site():
+    """Smoke test: recon reaches a real page and returns a surface map."""
+    from proofmark.http_client import HttpClient, RequestLog
+    from proofmark.tools.recon_tool import ReconTool
+    from proofmark.authorization import Authorization
+    with Sandbox() as sb:
+        auth = Authorization.grant("https://example.com/", "tester", [])
+        client = HttpClient(sb, auth, RequestLog())
+        # probe_paths off to keep the smoke test quick and quiet
+        out = ReconTool(client).run(url="https://example.com/", probe_paths=False)
+        assert not out.is_error
+        assert "Mapped" in out.output and "page(s)" in out.output

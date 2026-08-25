@@ -67,6 +67,31 @@ class HttpClient:
         self._auth = authorization
         self.log = log
 
+    def raw(self, request: Request) -> dict | None:
+        """Scope-checked, sandboxed fetch that returns the FULL parsed response.
+
+        For internal tools (recon) that need the whole body to parse, not the
+        short preview the agent sees. Still logs a compact exchange.
+        """
+        if not self._auth.permits_host(request.url):
+            self.log.add(request, None, "", error="out of scope")
+            return None
+        spec = json.dumps({
+            "method": request.method, "url": request.url,
+            "headers": request.headers or {}, "body": request.body, "timeout": 20,
+        })
+        code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
+        try:
+            data = json.loads(out.strip())
+        except ValueError:
+            self.log.add(request, None, out[:200], error=f"runner exit {code}")
+            return None
+        if "error" in data:
+            self.log.add(request, None, "", error=data["error"])
+            return None
+        self.log.add(request, data.get("status"), (data.get("body") or "")[:1200])
+        return data
+
     def send(self, request: Request) -> tuple[bool, str, Exchange]:
         """Returns (ok, text_for_the_agent, logged_exchange)."""
         if not self._auth.permits_host(request.url):

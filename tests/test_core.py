@@ -113,3 +113,37 @@ def test_repo_shorthand_is_normalized():
     assert _normalize_repo_url("owner/repo") == "https://github.com/owner/repo.git"
     assert _normalize_repo_url("https://github.com/o/r.git") == "https://github.com/o/r.git"
     assert _normalize_repo_url("git@github.com:o/r.git") == "git@github.com:o/r.git"
+
+
+# ------------------------------------------------------------- recon parsing
+def test_recon_extracts_links_forms_and_params():
+    from proofmark.recon import parse_html
+    html = """
+    <html><body>
+      <a href="/about">About</a>
+      <a href="https://other.test/x">External</a>
+      <form action="/search" method="post">
+        <input name="q"><input name="page"><textarea name="notes"></textarea>
+      </form>
+      <script src="/static/app.js"></script>
+    </body></html>
+    """
+    ex = parse_html("https://app.test/", html)
+    assert "https://app.test/about" in ex.links
+    assert "https://other.test/x" in ex.links
+    assert len(ex.forms) == 1
+    form = ex.forms[0]
+    assert form["method"] == "POST"
+    assert form["action"] == "https://app.test/search"
+    assert set(form["inputs"]) == {"q", "page", "notes"}
+    assert "https://app.test/static/app.js" in ex.scripts
+
+
+def test_recon_summary_flags_forms_as_injection_points():
+    from proofmark.recon import Surface, summarize
+    s = Surface(pages=["https://app.test/"],
+                forms=[{"action": "https://app.test/search", "method": "GET", "inputs": ["q"]}],
+                found_paths=[("https://app.test/.env", 200)])
+    text = summarize(s)
+    assert "injection points" in text
+    assert "/.env" in text and "HTTP 200" in text
