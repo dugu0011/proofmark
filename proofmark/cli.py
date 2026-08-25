@@ -25,7 +25,7 @@ from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
-    ProposeFixTool, FixLog,
+    ProposeFixTool, FixLog, BrowserTool,
 )
 from proofmark.http_client import HttpClient, RequestLog, Request
 from proofmark import audit, specs
@@ -150,6 +150,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, m
     try:
         with Sandbox() as sandbox:
             req_log = RequestLog()
+            browser = BrowserTool(auth)
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
@@ -158,14 +159,14 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, m
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
                     RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client),
-                    ProposeFixTool(sandbox, fix_log), RecordFindingTool(),
+                    ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(),
                 ]
                 suffix = code_mode_note()
             else:
                 client = HttpClient(sandbox, auth, req_log)
                 tools = [
                     ReconTool(client), HttpRequestTool(client), ListRequestsTool(client),
-                    ReplayRequestTool(client), RunCommandTool(sandbox), RecordFindingTool(),
+                    ReplayRequestTool(client), RunCommandTool(sandbox), browser, RecordFindingTool(),
                 ]
                 suffix = spec_briefing
 
@@ -179,6 +180,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, m
             started_at = datetime.now(timezone.utc).isoformat()
             outcome = agent.run(source.label if source else target, cfg.kind)
             finished_at = datetime.now(timezone.utc).isoformat()
+            browser.close()
     except SandboxError as exc:
         _fail(f"Sandbox error: {exc}")
     finally:
@@ -280,6 +282,29 @@ def replay(run_dir):
     sys.exit(0)
 
 
+@main.command(name="build-sandbox")
+def build_sandbox():
+    """Build the browser sandbox image (Chromium) used by the `browser` tool."""
+    import subprocess
+    from pathlib import Path as _P
+
+    dockerfile = _P(__file__).parent.parent / "Dockerfile.sandbox"
+    if not dockerfile.exists():
+        _fail("Dockerfile.sandbox not found next to the package.")
+    click.echo(f"{C['dim']}building proofmark-sandbox:latest (this pulls Chromium; a few minutes)…{C['reset']}")
+    try:
+        subprocess.run(
+            ["docker", "build", "-f", str(dockerfile), "-t", "proofmark-sandbox:latest",
+             str(dockerfile.parent)],
+            check=True,
+        )
+    except FileNotFoundError:
+        _fail("docker is not installed or not on PATH.")
+    except subprocess.CalledProcessError as exc:
+        _fail(f"docker build failed (exit {exc.returncode}).")
+    click.echo(f"{C['green']}\u2713{C['reset']} browser sandbox built. The `browser` tool is now available.")
+
+
 @main.command()
 def doctor():
     """Check that Docker and an LLM key are available."""
@@ -306,6 +331,13 @@ def doctor():
     except ImportError:
         ok = False
         click.echo(f"{C['red']}✗{C['reset']} litellm not installed (pip install litellm)")
+
+    try:
+        import docker as _d
+        _d.from_env().images.get("proofmark-sandbox:latest")
+        click.echo(f"{C['green']}✓{C['reset']} browser sandbox image built")
+    except Exception:  # noqa: BLE001
+        click.echo(f"{C['dim']}○ browser sandbox not built (optional) — run: proofmark build-sandbox{C['reset']}")
 
     sys.exit(0 if ok else 1)
 

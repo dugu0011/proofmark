@@ -52,6 +52,7 @@ what this gives you.
 ```bash
 pip install -e .          # from a clone
 proofmark doctor          # check Docker + your LLM key are ready
+proofmark build-sandbox   # optional: build the Chromium image for the browser tool
 ```
 
 You need Docker running and an API key for your model of choice:
@@ -107,7 +108,7 @@ Early, but it tests **live URLs and code** already.
 - [x] Signed, verifiable, replayable run records
 - [x] Verified autofix — the agent writes the patch, Proofmark checks it applies
 - [x] Spec inputs — OpenAPI / Swagger and Postman collections seed the endpoint map
-- [ ] Headless browser (XSS/CSRF/DOM)
+- [x] Headless browser (XSS/CSRF/DOM) — run `proofmark build-sandbox` once to enable
 - [ ] A graph of agents (recon → exploit)
 
 ## Design

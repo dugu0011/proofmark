@@ -1,0 +1,13 @@
+# The browser sandbox image for Proofmark's `browser` tool.
+# Build once:  proofmark build-sandbox   (or: docker build -f Dockerfile.sandbox -t proofmark-sandbox:latest .)
+#
+# It carries Chromium so the agent can run pages with JavaScript and prove
+# client-side bugs (XSS/CSRF/DOM). Kept separate from the light default sandbox
+# so a scan that never needs a browser never pays for one.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir playwright==1.47.0 \
+    && playwright install --with-deps chromium
+
+WORKDIR /work
+CMD ["sleep", "infinity"]

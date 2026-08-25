@@ -43,12 +43,14 @@ class Sandbox:
         mem_limit: str = "512m",
         pids_limit: int = 256,
         name_prefix: str = "proofmark",
+        auto_pull: bool = True,
     ) -> None:
         if docker is None:
             raise SandboxError("the 'docker' package is not installed (pip install docker)")
         self.image = image
         self.mem_limit = mem_limit
         self.pids_limit = pids_limit
+        self.auto_pull = auto_pull
         self.name = f"{name_prefix}-{int(time.time())}"
         # The runner lives outside /work: /work is a tmpfs mount, and Docker's
         # put_archive writes to the image layer *under* a mount, where the file
@@ -129,22 +131,31 @@ class Sandbox:
         try:
             self._client.images.get(self.image)
         except ImageNotFound:
-            # First run pulls the base image; can take a moment.
-            self._client.images.pull(self.image)
+            if not self.auto_pull:
+                raise SandboxError(
+                    f"image '{self.image}' is not built. Run: proofmark build-sandbox")
+            self._client.images.pull(self.image)  # first run pulls the base image
 
     def _install_runner(self) -> None:
-        """Copy the HTTP runner into the container, outside the tmpfs mount."""
+        self.install_script(_RUNNER)
+
+    def install_script(self, local_path, name: str | None = None) -> str:
+        """Copy a script into /opt/proofmark (outside the tmpfs mount). Returns its path."""
+        from pathlib import Path as _P
+        local_path = _P(local_path)
+        name = name or local_path.name
         self._container.exec_run(["mkdir", "-p", "/opt/proofmark"])
-        data = _RUNNER.read_bytes()
+        data = local_path.read_bytes()
         stream = io.BytesIO()
         with tarfile.open(fileobj=stream, mode="w") as tar:
-            info = tarfile.TarInfo("http_runner.py")
+            info = tarfile.TarInfo(name)
             info.size = len(data)
             info.mode = 0o755
             tar.addfile(info, io.BytesIO(data))
         stream.seek(0)
         if not self._container.put_archive("/opt/proofmark", stream.getvalue()):
-            raise SandboxError("could not install the HTTP runner into the sandbox")
+            raise SandboxError(f"could not install {name} into the sandbox")
+        return f"/opt/proofmark/{name}"
 
     def copy_in(self, local_dir, dest: str | None = None) -> str:
         """Copy a local directory tree into the sandbox. Returns the dest path.
