@@ -312,6 +312,13 @@ def replay(run_dir):
     sys.exit(0)
 
 
+@main.command(name="mcp")
+def mcp_cmd():
+    """Start the MCP server (stdio) so an AI assistant can run Proofmark."""
+    from proofmark.mcp_server import main as mcp_main
+    mcp_main()
+
+
 @main.command(name="build-sandbox")
 def build_sandbox():
     """Build the browser sandbox image (Chromium) used by the `browser` tool."""

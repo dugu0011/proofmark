@@ -26,9 +26,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+mcp = ["mcp>=1.0"]
 
 [project.scripts]
 proofmark = "proofmark.cli:main"
+proofmark-mcp = "proofmark.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/dugu0011/proofmark"
