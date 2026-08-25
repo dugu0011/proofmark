@@ -1,142 +1,234 @@
 # Proofmark
 
-**An AI agent that finds and _proves_ real vulnerabilities in code you own.**
+**The open-source AI pentester that proves what it finds.** Autonomous AI agents
+that run your app in a sandbox, find vulnerabilities, and validate them with a
+real proof-of-concept — never a false positive from a static scanner.
 
-Most scanners tell you something *looks* wrong and leave you to sort the real
-bugs from the noise. Proofmark works the other way: it runs an autonomous agent
-that probes your application inside a sandbox, forms a hypothesis, and then
-**reproduces the exploit** before it says a word. Every finding comes with a
-proof-of-concept — the request it sent and the response that proves the impact.
-If it can't prove it, it doesn't report it.
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Status](https://img.shields.io/badge/status-alpha-orange)
 
-> ⚠️ Proofmark actively exploits its target. Only run it against systems you own
-> or are explicitly authorized to test. It will not start without you asserting
-> that authorization, and it records the assertion in every report.
+> **Authorized use only.** Proofmark actively exploits the targets you point it
+> at. Only run it against systems you own or have explicit, written permission to
+> test. It refuses to start without an explicit `--authorized` assertion, records
+> that assertion in every run, and refuses any request outside the scope you gave
+> it — but the responsibility for having permission is yours.
 
-## How it works
+---
 
-1. You point it at a target and assert authorization.
-2. It starts a throwaway Docker sandbox — capped, isolated, no host access.
-3. An LLM-driven agent works the target through tools: send HTTP requests, run
-   commands, take notes. It plans, acts, observes, and repeats.
-4. When it reproduces a vulnerability, it records it **with the PoC**.
-5. You get a Markdown report of only what it could prove.
+## Overview
 
-The agent runs entirely inside the sandbox, and a scope guard refuses any request
-to a host you didn't authorize — enforced in code, not just asked of the model.
+Proofmark is an autonomous penetration-testing agent that acts like a real
+attacker: it runs your code dynamically inside an isolated Docker sandbox, forms
+a hypothesis, and **reproduces the exploit** before it reports anything. Every
+finding carries the request it sent and the response that proves the impact. If
+it can't prove it, it doesn't report it.
+
+It is built for developers and security teams who want fast, accurate testing
+without the overhead of a manual pentest or the noise of a static scanner — and
+it is built to be **trustworthy enough to actually run**: enforced scope, and a
+signed, replayable record of everything the agent did.
+
+**Key capabilities**
+
+- **Prove, don't guess** — findings are validated with a working proof-of-concept, not pattern-matched.
+- **Full offensive toolkit** — recon, OSINT, an HTTP intercept proxy, a real browser, a code reader, a shell, and a verified auto-fixer.
+- **Multi-agent** — a recon agent maps the target, then an exploit agent proves what it can, sharing a blackboard.
+- **Any target** — a live URL, a local codebase, a git repo, an OpenAPI/Swagger spec, or a Postman collection.
+- **Enforced authorization** — scope is checked in code, not asked of the model. Out-of-scope requests are refused before they leave the process.
+- **Signed, replayable run records** — every run is tamper-evident and can be re-verified and replayed. *This is the part a security team needs before it will let an agent exploit its systems — and no other tool in this space has it.*
+- **Provider-agnostic** — OpenAI, Anthropic, Azure and more, via LiteLLM.
+
+## Why Proofmark is different
+
+Most tools in this space race to be the most *capable* generalist. Proofmark is
+built to be the most *trustworthy* one:
+
+| | Typical AI pentester | Proofmark |
+|---|---|---|
+| Authorization | a warning in the docs | **enforced in code**, recorded per run |
+| Out-of-scope requests | trusted to the model | **refused before they send** |
+| Run record | logs, at best | **hash-chained, optionally signed, replayable** |
+| "Does the exploit still work?" | re-run and hope | **`proofmark replay`** |
+
+## Quick start
+
+**Prerequisites:** Docker running, and an LLM API key from any supported provider.
+
+```bash
+# Install
+pip install git+https://github.com/dugu0011/proofmark.git
+
+# Check your environment
+proofmark doctor
+
+# Configure your provider (LiteLLM reads the key from the environment)
+export ANTHROPIC_API_KEY="your-api-key"     # or OPENAI_API_KEY / AZURE_API_KEY
+
+# Run your first assessment
+proofmark scan -t https://staging.my-app.test --authorized --operator you@team.com
+```
+
+The first run pulls the sandbox image. Every run writes a tamper-evident record
+to `proofmark_runs/<id>/`.
 
 ## Every run is signed, verifiable, and replayable
 
-This is the part built for the security team, not just the developer. Every scan
-writes a **tamper-evident run record** to `proofmark_runs/<id>/`: what was
-authorized, every step the agent took, every request it sent, and what it proved
-— with the steps hash-chained so any later edit is provable.
+This is Proofmark's core difference. Each scan writes a **tamper-evident record**
+to disk: what was authorized, every step the agent took, every request it sent,
+and every finding it proved — with the steps hash-chained, so any later edit is
+provable.
 
 ```bash
 proofmark verify proofmark_runs/20260101-120000    # is this record intact?
 proofmark replay proofmark_runs/20260101-120000    # does the exploit still work?
+
+export PROOFMARK_SIGNING_KEY="..."                 # HMAC-sign records — now attributable, not just unaltered
 ```
 
-Set a signing key and records become attributable too, not just unaltered:
+## Features
+
+### Agentic toolkit
+
+Proofmark's agents drive the same tools a professional tester would, each running
+inside the sandbox:
+
+- **Recon** — crawl same-host links, extract forms and their parameters, probe common paths (`.env`, `.git`, admin, api).
+- **Subdomain OSINT** — passive discovery from Certificate Transparency logs. Never probes what it finds; marks what is in scope.
+- **HTTP intercept proxy** — send, list, and **replay** requests with any field mutated. The capture-mutate-replay loop that confirms injection and authorization bugs.
+- **Browser** — a real headless Chromium for client-side bugs (reflected/stored/DOM XSS, CSRF). A fired dialog is captured as proof injected script executed.
+- **Code analysis** — list, read and search the source of a code target, confined to the source root.
+- **Shell + Python** — run commands inside the sandbox for exploit development and validation.
+- **Verified auto-fix** — the agent writes a patch; Proofmark applies it in memory and accepts it *only if it applies cleanly*. A broken fix never reaches the report.
+
+### Vulnerability classes
+
+Broken access control (IDOR, privilege escalation, auth bypass) · injection (SQL,
+NoSQL, command, SSTI) · server-side (SSRF, XXE, deserialization, RCE) ·
+client-side (XSS, CSRF, prototype pollution) · authentication & session · security
+misconfiguration · exposed secrets · API security (mass assignment, broken authz).
+
+### Graph of agents
+
+`--strategy graph` runs a coordinated team instead of one generalist: a **recon
+agent** maps the target and is told explicitly *not* to exploit — it records what
+it finds — then an **exploit agent** starts from that map and proves what it can.
+Findings from every phase aggregate, and the authorization gate and signed record
+wrap the whole graph.
+
+## Usage
 
 ```bash
-export PROOFMARK_SIGNING_KEY=...    # HMAC-signs every run record
-```
-
-An autonomous agent that *exploits* your systems is only adoptable if you can
-prove afterwards exactly what it did and that the record wasn't touched. That's
-what this gives you.
-
-## Install
-
-```bash
-pip install -e .          # from a clone
-proofmark doctor          # check Docker + your LLM key are ready
-proofmark build-sandbox   # optional: build the Chromium image for the browser tool
-```
-
-You need Docker running and an API key for your model of choice:
-
-```bash
-export ANTHROPIC_API_KEY=...      # for anthropic/… models (default)
-# or OPENAI_API_KEY / AZURE_API_KEY
-```
-
-## Use
-
-```bash
-# A live URL you own
-proofmark scan -t https://staging.my-app.test --authorized --operator you@team.com
+# A live web application
+proofmark scan -t https://your-app.test --authorized
 
 # A local codebase — the agent reads AND runs it in the sandbox to prove bugs
-proofmark scan -t ./my-service --authorized --operator you@team.com
+proofmark scan -t ./my-service --authorized
 
-# A git repo (shorthand or full URL)
+# A git repository (shorthand or full URL)
 proofmark scan -t owner/repo --authorized
 
-# Choose a model, write the report to a file, widen the scope
-proofmark scan -t https://my-api.test \
-  --authorized \
-  --model openai/gpt-4o \
-  --allow-host cdn.my-app.test \
-  -o report.md
+# An OpenAPI / Swagger spec, tested against its server
+proofmark scan -t ./openapi.yaml --base-url https://api.your-app.test --authorized
+
+# A Postman collection
+proofmark scan -t ./collection.json --base-url https://api.your-app.test --authorized
+
+# A graph of agents: recon maps, exploit proves
+proofmark scan -t https://your-app.test --authorized --strategy graph
+
+# Write the report to a file (exits non-zero if anything is proven — good for CI)
+proofmark scan -t https://your-app.test --authorized -o report.md
 ```
 
-Proofmark exits non-zero when it proves at least one finding, so CI can gate on
-it.
+## CI/CD (GitHub Actions)
 
-### In CI
-
-Proofmark ships a packaged GitHub Action — add it to a workflow to gate pull
-requests:
+Proofmark ships a packaged action — gate pull requests with a few lines:
 
 ```yaml
-- uses: dugu0011/proofmark@v1
-  with:
-    target: ${{ vars.PREVIEW_URL }}   # a deployed preview you own
-    authorized: "true"
-    strategy: graph                    # recon -> exploit
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+name: proofmark
+
+on:
+  pull_request:
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dugu0011/proofmark@v1
+        with:
+          target: ${{ vars.PREVIEW_URL }}   # a deployed preview you own
+          authorized: "true"
+          strategy: graph
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-The job fails if a vulnerability is proven (configurable with `fail-on-findings`),
-and the report is uploaded as an artifact. A full example is in
-[`.github/workflows/example-scan.yml`](.github/workflows/example-scan.yml).
+The job fails if a vulnerability is proven (configurable via `fail-on-findings`),
+and the report is uploaded as an artifact.
 
-## Status
+## Use Proofmark from your coding agent
 
-Early, but it tests **live URLs and code** already.
+Proofmark is agent-ready. It ships a `SKILL.md` and an MCP server, so Claude Code,
+Cursor, Codex or anything that speaks the Model Context Protocol can run a scan
+and check a run record:
 
-- [x] Live URL targets — the agent probes and validates from inside the sandbox
-- [x] Code targets — a local path or a git repo. The source is copied into the
-      jail; the agent reads it (`list_files` / `read_file` / `search_code`), can
-      run it, and exploits the running app over loopback to produce a real PoC.
-      This is the edge: *code in, running exploit out* — not static guessing.
-- [ ] A richer tool suite: headless browser, HTTP replay/proxy
-- [ ] Fix suggestions in the report
-- [x] A packaged GitHub Action — `uses: dugu0011/proofmark@v1`
-- [x] Recon: crawl, extract forms/params, probe common paths
-- [x] Passive subdomain OSINT (Certificate Transparency), scope-respecting
-- [x] Intercept proxy: capture / mutate / replay requests
-- [x] Signed, verifiable, replayable run records
-- [x] Verified autofix — the agent writes the patch, Proofmark checks it applies
-- [x] Spec inputs — OpenAPI / Swagger and Postman collections seed the endpoint map
-- [x] Headless browser (XSS/CSRF/DOM) — run `proofmark build-sandbox` once to enable
-- [x] A graph of agents (recon → exploit) — `--strategy graph`
+```bash
+pip install "proofmark[mcp]"
+proofmark mcp        # start the MCP server on stdio
+```
 
-## Design
+## Configuration
+
+Proofmark uses [LiteLLM](https://github.com/BerriAI/litellm), so any supported
+provider works — set the model and the matching key:
+
+```bash
+export ANTHROPIC_API_KEY="..."     # for anthropic/... models (default)
+export OPENAI_API_KEY="..."        # for openai/... models
+export AZURE_API_KEY="..."         # for azure/... models
+
+proofmark scan -t <target> --authorized --model openai/gpt-4o
+```
+
+Recommended models: `anthropic/claude-sonnet-4-6`, `openai/gpt-4o`.
+
+## How it works
 
 - `cli.py` — the command line
 - `agent.py` — the plan→act→observe loop and its budgets
-- `tools/` — what the agent can do (each declares a schema, runs in the sandbox)
-- `sandbox.py` — the Docker jail everything runs in
+- `orchestrator.py` — the graph of agents, sharing a blackboard
+- `tools/` — everything an agent can do; each declares a schema and runs in the sandbox
+- `sandbox.py` — the Docker jail everything runs in (caps dropped, no host mounts)
 - `authorization.py` — the scope gate, enforced in code
-- `llm.py` — one provider-agnostic call, via litellm
-- `report.py` — the Markdown output
+- `audit.py` — signed, hash-chained, replayable run records
+- `llm.py` — one provider-agnostic call, via LiteLLM
 
 Rename the whole product by editing the three names in `proofmark/__about__.py`.
 
+## Contributing
+
+Contributions of code, tools, and docs are welcome — open an issue or a pull
+request. Run the test suite with `pytest` (Docker-backed tests skip
+automatically when Docker is unavailable).
+
+## Acknowledgements
+
+Proofmark builds on the work of open-source projects including
+[LiteLLM](https://github.com/BerriAI/litellm),
+[Playwright](https://github.com/microsoft/playwright), and
+[Docker](https://www.docker.com/). Thanks to their maintainers.
+
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).
+
+---
+
+> **Warning — authorized use only.** Proofmark actively tests the targets you
+> point it at. Only run it against systems you own or have explicit, written
+> permission to test, and stay within the agreed scope. Unauthorized testing is
+> illegal in most jurisdictions. You alone are responsible for obtaining
+> authorization and complying with the law. Proofmark is provided "as is", with no
+> warranty or liability for misuse.
