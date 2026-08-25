@@ -89,3 +89,27 @@ def test_model_prefix_picks_the_right_key():
     assert RunConfig("t", "url", model="anthropic/claude-sonnet-4-6").key_env_var() == "ANTHROPIC_API_KEY"
     assert RunConfig("t", "url", model="openai/gpt-4o").key_env_var() == "OPENAI_API_KEY"
     assert RunConfig("t", "url", model="azure/gpt-4.1").key_env_var() == "AZURE_API_KEY"
+
+
+# ------------------------------------------------------ code-target scope
+def test_code_scope_allows_loopback_denies_internet():
+    auth = Authorization.for_code("./my-service", "me")
+    assert auth.permits_host("http://localhost:8000/user")
+    assert auth.permits_host("http://127.0.0.1:5000/")
+    assert auth.permits_host("http://[::1]:3000/x")
+    assert not auth.permits_host("https://evil.test")
+    # SSRF classic still denied even in code mode.
+    assert not auth.permits_host("http://169.254.169.254/latest/meta-data/")
+
+
+def test_scope_is_per_host_ignoring_port():
+    auth = Authorization.grant("https://app.test:8443/login", "me")
+    assert auth.permits_host("https://app.test/other")
+    assert auth.permits_host("https://app.test:9000/x")
+
+
+def test_repo_shorthand_is_normalized():
+    from proofmark.source import _normalize_repo_url
+    assert _normalize_repo_url("owner/repo") == "https://github.com/owner/repo.git"
+    assert _normalize_repo_url("https://github.com/o/r.git") == "https://github.com/o/r.git"
+    assert _normalize_repo_url("git@github.com:o/r.git") == "git@github.com:o/r.git"

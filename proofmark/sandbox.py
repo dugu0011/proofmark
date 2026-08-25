@@ -54,6 +54,9 @@ class Sandbox:
         # put_archive writes to the image layer *under* a mount, where the file
         # would be invisible. /opt is not mounted, so it lands and stays.
         self.runner_path = "/opt/proofmark/http_runner.py"
+        # Where a code target is copied inside the jail. Not a mount, so the
+        # agent can read, build and run it without ever touching the host.
+        self.source_root = "/src"
         self._client = None
         self._container = None
 
@@ -142,3 +145,29 @@ class Sandbox:
         stream.seek(0)
         if not self._container.put_archive("/opt/proofmark", stream.getvalue()):
             raise SandboxError("could not install the HTTP runner into the sandbox")
+
+    def copy_in(self, local_dir, dest: str | None = None) -> str:
+        """Copy a local directory tree into the sandbox. Returns the dest path.
+
+        Places a code target inside the jail. Skips the usual noise (.git,
+        node_modules, venvs) and very large blobs so a big repo does not blow up
+        the transfer.
+        """
+        from pathlib import Path as _P
+
+        dest = dest or self.source_root
+        self._container.exec_run(["mkdir", "-p", dest])
+        skip = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"}
+        root = _P(local_dir)
+        stream = io.BytesIO()
+        with tarfile.open(fileobj=stream, mode="w") as tar:
+            for path in root.rglob("*"):
+                rel = path.relative_to(root)
+                if any(part in skip for part in rel.parts):
+                    continue
+                if path.is_file() and path.stat().st_size < 2_000_000:
+                    tar.add(path, arcname=str(rel))
+        stream.seek(0)
+        if not self._container.put_archive(dest, stream.getvalue()):
+            raise SandboxError("could not copy the source into the sandbox")
+        return dest

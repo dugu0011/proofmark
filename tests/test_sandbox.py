@@ -47,3 +47,25 @@ def test_the_http_tool_refuses_out_of_scope():
         result = HttpRequestTool(sb, auth).run(
             method="GET", url="http://169.254.169.254/latest/meta-data/")
         assert result.is_error
+
+
+def test_a_code_target_can_be_read_and_searched(tmp_path):
+    (tmp_path / "app.py").write_text(
+        'PASSWORD = "planted-secret"\n'
+        'q = "SELECT * FROM t WHERE id = \'%s\'" % request.args.get("id")\n'
+    )
+    from proofmark.tools.code_tools import ListFilesTool, ReadFileTool, SearchCodeTool
+    with Sandbox() as sb:
+        sb.copy_in(tmp_path)
+        assert "app.py" in ListFilesTool(sb).run().output
+        read = ReadFileTool(sb).run(path="app.py")
+        assert "PASSWORD" in read.output and read.output.lstrip().startswith("1")
+        found = SearchCodeTool(sb).run(pattern="PASSWORD")
+        assert "planted-secret" in found.output
+
+
+def test_reading_outside_the_source_root_is_refused():
+    from proofmark.tools.code_tools import ReadFileTool
+    with Sandbox() as sb:
+        result = ReadFileTool(sb).run(path="../../etc/passwd")
+        assert result.is_error

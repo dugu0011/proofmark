@@ -57,3 +57,28 @@ def system_prompt(name: str, auth: Authorization) -> str:
 
 def first_message(target: str, kind: str) -> str:
     return FIRST_MESSAGE.format(target=target, kind=kind)
+
+CODE_MODE = """\
+This is a CODE target: the full source is available to you under the source \
+root, and you have tools to list, read and search it. You also have a shell and \
+an HTTP tool, and the source has been placed inside your sandbox.
+
+Your edge over a static scanner is that you can PROVE things dynamically:
+1. Read the code to understand it and to find how to run it (entry point, \
+dependencies, how it starts, what port it binds).
+2. Where it is worth it, actually START the application inside the sandbox \
+(install dependencies, run it in the background) and then attack the running \
+instance over http://localhost:<port> to reproduce a real exploit.
+3. Only loopback is in scope for HTTP — the app you start listens there. That is \
+deliberate: you prove the bug against the running code, not against the internet.
+
+Reading the code is how you find candidates; running and exploiting it is how you \
+turn a candidate into a proven finding. Prefer proof over inference — but if a \
+vulnerability is unambiguous from the code (a hardcoded secret, a raw SQL string \
+built from a request parameter), you may record it citing the exact file and \
+lines as the proof.
+"""
+
+
+def code_mode_note() -> str:
+    return CODE_MODE

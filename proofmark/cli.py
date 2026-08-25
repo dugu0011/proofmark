@@ -21,7 +21,12 @@ from proofmark.config import DEFAULT_MODEL, RunConfig
 from proofmark.llm import LLM
 from proofmark.report import to_markdown
 from proofmark.sandbox import Sandbox, SandboxError
-from proofmark.tools import HttpRequestTool, RecordFindingTool, RunCommandTool
+from proofmark.tools import (
+    HttpRequestTool, ListFilesTool, ReadFileTool, RecordFindingTool,
+    RunCommandTool, SearchCodeTool,
+)
+from proofmark.source import prepare as prepare_source, SourceError
+from proofmark.prompts import code_mode_note
 
 # Simple ANSI colour without a hard dependency on rich for the skeleton.
 C = {"dim": "\033[2m", "b": "\033[1m", "cyan": "\033[36m", "yellow": "\033[33m",
@@ -79,10 +84,6 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
         time_budget_seconds=time_budget, output_path=output,
     )
 
-    if cfg.kind != "url":
-        _fail(f"This early build tests live URLs only. Code targets ('{cfg.kind}') are the next "
-              "increment. Point it at a running instance for now.")
-
     if not authorized:
         _fail("Refused. This tool actively exploits its target, so it will not run without "
               "--authorized, asserting you have permission to test it. That assertion is "
@@ -92,27 +93,51 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
     if missing:
         _fail(f"The model '{model}' needs {missing} in your environment. Set it and retry.")
 
-    auth = Authorization.grant(target, operator or "unknown", cfg.allow_hosts)
-    click.echo(f"{C['b']}{NAME}{C['reset']} v{VERSION}  {C['dim']}·{C['reset']}  target {C['cyan']}{target}{C['reset']}")
-    click.echo(f"{C['dim']}authorized by {auth.operator} · scope: {', '.join(sorted(auth.allowed_hosts))} · model {model}{C['reset']}")
-    click.echo(f"{C['dim']}starting sandbox…{C['reset']}")
+    is_code = cfg.kind in ("path", "repo")
+    if is_code:
+        auth = Authorization.for_code(target, operator or "unknown")
+    else:
+        auth = Authorization.grant(target, operator or "unknown", cfg.allow_hosts)
 
+    click.echo(f"{C['b']}{NAME}{C['reset']} v{VERSION}  {C['dim']}·{C['reset']}  target {C['cyan']}{target}{C['reset']} ({cfg.kind})")
+    click.echo(f"{C['dim']}authorized by {auth.operator} · scope: {', '.join(sorted(auth.allowed_hosts))} · model {model}{C['reset']}")
+
+    source = None
+    if is_code:
+        click.echo(f"{C['dim']}preparing source…{C['reset']}")
+        try:
+            source = prepare_source(target, cfg.kind)
+        except SourceError as exc:
+            _fail(str(exc))
+
+    click.echo(f"{C['dim']}starting sandbox…{C['reset']}")
     try:
         with Sandbox() as sandbox:
-            registry = build_registry([
-                HttpRequestTool(sandbox, auth),
-                RunCommandTool(sandbox),
-                RecordFindingTool(),
-            ])
+            if is_code:
+                click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
+                sandbox.copy_in(source.root)
+                tools = [
+                    ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
+                    RunCommandTool(sandbox), HttpRequestTool(sandbox, auth), RecordFindingTool(),
+                ]
+                suffix = code_mode_note()
+            else:
+                tools = [HttpRequestTool(sandbox, auth), RunCommandTool(sandbox), RecordFindingTool()]
+                suffix = ""
+
+            registry = build_registry(tools)
             agent = Agent(
                 LLM(model, api_base=api_base), registry, auth,
-                name=NAME, max_steps=max_steps, time_budget_seconds=time_budget,
-                on_event=_render,
+                name=NAME, system_suffix=suffix,
+                max_steps=max_steps, time_budget_seconds=time_budget, on_event=_render,
             )
             click.echo(f"{C['dim']}─ agent working ─{C['reset']}")
-            outcome = agent.run(target, cfg.kind)
+            outcome = agent.run(source.label if source else target, cfg.kind)
     except SandboxError as exc:
         _fail(f"Sandbox error: {exc}")
+    finally:
+        if source is not None:
+            source.dispose()
 
     report = to_markdown(outcome, auth, target=target, model=model, product=NAME)
     click.echo("")

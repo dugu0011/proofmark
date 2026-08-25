@@ -27,6 +27,19 @@ class Authorization:
     # Hosts the agent may touch. The target's host, plus anything --allow-host adds.
     allowed_hosts: frozenset[str]
 
+    # Loopback names an app the agent starts *inside the sandbox*. Allowing
+    # these — and only these — lets a code target be exploited over localhost
+    # without opening any path to the wider network.
+    LOOPBACK = ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+
+    @classmethod
+    def for_code(cls, target: str, operator: str) -> "Authorization":
+        """Scope for a code target: the loopback the running app binds to."""
+        return cls(
+            target=target, operator=operator or "unknown",
+            asserted_at=datetime.now(timezone.utc), allowed_hosts=frozenset(cls.LOOPBACK),
+        )
+
     @classmethod
     def grant(cls, target: str, operator: str, extra_hosts: list[str] | None = None) -> "Authorization":
         hosts = {h for h in [_host_of(target), *(extra_hosts or [])] if h}
@@ -61,6 +74,15 @@ def _host_of(url_or_host: str) -> str:
         # Might be a bare host, or a local path / repo — only treat it as a host
         # if it looks like one.
         candidate = url_or_host.split("/")[0]
-        return candidate if ("." in candidate or ":" in candidate) and " " not in candidate else ""
-    netloc = urlsplit(url_or_host).netloc
-    return netloc.split("@")[-1]  # drop any user:pass@
+        if ("." in candidate or ":" in candidate) and " " not in candidate:
+            return _strip_port(candidate)
+        return ""
+    netloc = urlsplit(url_or_host).netloc.split("@")[-1]  # drop any user:pass@
+    return _strip_port(netloc)
+
+
+def _strip_port(netloc: str) -> str:
+    """Host without its port. Scope is per-host — localhost:8000 is localhost."""
+    if netloc.startswith("["):          # bracketed IPv6, e.g. [::1]:8000
+        return netloc[1:].split("]")[0]
+    return netloc.split(":")[0]

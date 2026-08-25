@@ -63,6 +63,7 @@ class Agent:
         authorization: Authorization,
         *,
         name: str,
+        system_suffix: str = "",
         max_steps: int = 40,
         time_budget_seconds: int = 600,
         on_event: Callable[[Event], None] | None = None,
@@ -71,13 +72,17 @@ class Agent:
         self._registry = registry
         self._auth = authorization
         self._name = name
+        self._system_suffix = system_suffix
         self._max_steps = max_steps
         self._deadline = time.time() + time_budget_seconds
         self._emit = on_event or (lambda e: None)
 
     def run(self, target: str, kind: str) -> Outcome:
+        system = system_prompt(self._name, self._auth)
+        if self._system_suffix:
+            system += "\n\n" + self._system_suffix
         messages = [
-            {"role": "system", "content": system_prompt(self._name, self._auth)},
+            {"role": "system", "content": system},
             {"role": "user", "content": first_message(target, kind)},
         ]
         tools = [*self._registry.specs(), _FINISH_SPEC]

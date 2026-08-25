@@ -42,8 +42,14 @@ export ANTHROPIC_API_KEY=...      # for anthropic/… models (default)
 ## Use
 
 ```bash
-# Scan a live URL you own
+# A live URL you own
 proofmark scan -t https://staging.my-app.test --authorized --operator you@team.com
+
+# A local codebase — the agent reads AND runs it in the sandbox to prove bugs
+proofmark scan -t ./my-service --authorized --operator you@team.com
+
+# A git repo (shorthand or full URL)
+proofmark scan -t owner/repo --authorized
 
 # Choose a model, write the report to a file, widen the scope
 proofmark scan -t https://my-api.test \
@@ -64,12 +70,17 @@ a scan against a deployed preview URL and fails the job if anything is proven.
 
 ## Status
 
-Early. This build tests **live URLs**. On the roadmap, in order:
+Early, but it tests **live URLs and code** already.
 
-- [ ] Code targets: a local path and a git repo
-- [ ] A richer tool suite: headless browser, HTTP replay/proxy, file reading
+- [x] Live URL targets — the agent probes and validates from inside the sandbox
+- [x] Code targets — a local path or a git repo. The source is copied into the
+      jail; the agent reads it (`list_files` / `read_file` / `search_code`), can
+      run it, and exploits the running app over loopback to produce a real PoC.
+      This is the edge: *code in, running exploit out* — not static guessing.
+- [ ] A richer tool suite: headless browser, HTTP replay/proxy
 - [ ] Fix suggestions in the report
 - [ ] A packaged GitHub Action (not just an example workflow)
+- [ ] A graph of agents (recon → exploit)
 
 ## Design
 
