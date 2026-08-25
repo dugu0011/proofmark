@@ -28,7 +28,7 @@ from proofmark.tools import (
     ProposeFixTool, FixLog,
 )
 from proofmark.http_client import HttpClient, RequestLog, Request
-from proofmark import audit
+from proofmark import audit, specs
 from proofmark.source import prepare as prepare_source, SourceError
 from proofmark.prompts import code_mode_note
 
@@ -40,7 +40,10 @@ C = {"dim": "\033[2m", "b": "\033[1m", "cyan": "\033[36m", "yellow": "\033[33m",
 def _classify(target: str) -> str:
     if target.startswith(("http://", "https://")):
         return "url"
-    if Path(target).exists():
+    p = Path(target)
+    if p.is_file() and p.suffix.lower() in (".json", ".yaml", ".yml"):
+        return "spec"
+    if p.exists():
         return "path"
     if target.endswith(".git") or target.count("/") == 1 or "github.com" in target:
         return "repo"
@@ -77,11 +80,12 @@ def main(ctx: click.Context) -> None:
 @click.option("--model", default=DEFAULT_MODEL, show_default=True, help="LLM, litellm-style.")
 @click.option("--api-base", default="", help="Custom API base (e.g. Azure endpoint).")
 @click.option("--allow-host", "allow_hosts", multiple=True, help="Extra host the agent may reach.")
+@click.option("--base-url", default="", help="Base URL to test a spec target against (if the spec omits it).")
 @click.option("--max-steps", default=40, show_default=True, help="Hard cap on agent actions.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
-def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, time_budget, output, run_dir):
+def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, max_steps, time_budget, output, run_dir):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model, api_base=api_base,
@@ -103,6 +107,27 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
     def _record(event: Event) -> None:
         steps.append({"kind": event.kind, "text": event.text, "detail": event.detail})
         _render(event)
+
+    spec_briefing = ""
+    if cfg.kind == "spec":
+        try:
+            text = Path(target).read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            _fail(f"could not read the spec: {exc}")
+        kind = specs.sniff(text)
+        if kind is None:
+            _fail("that file is not a recognized OpenAPI/Swagger spec or Postman collection.")
+        base, endpoints = specs.parse(text)
+        base = base_url or base
+        if not base:
+            _fail("the spec has no server URL — pass --base-url https://api.you.own to say where to test.")
+        if not endpoints:
+            _fail("no endpoints found in the spec.")
+        spec_briefing = specs.briefing(base, endpoints)
+        click.echo(f"{C['dim']}spec: {len(endpoints)} endpoint(s) → testing against {base}{C['reset']}")
+        # from here on it behaves like a URL target pointed at the spec's server
+        target = base
+        cfg.kind = "url"
 
     is_code = cfg.kind in ("path", "repo")
     if is_code:
@@ -142,7 +167,7 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
                     ReconTool(client), HttpRequestTool(client), ListRequestsTool(client),
                     ReplayRequestTool(client), RunCommandTool(sandbox), RecordFindingTool(),
                 ]
-                suffix = ""
+                suffix = spec_briefing
 
             registry = build_registry(tools)
             agent = Agent(

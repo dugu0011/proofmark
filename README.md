@@ -106,6 +106,7 @@ Early, but it tests **live URLs and code** already.
 - [x] Intercept proxy: capture / mutate / replay requests
 - [x] Signed, verifiable, replayable run records
 - [x] Verified autofix — the agent writes the patch, Proofmark checks it applies
+- [x] Spec inputs — OpenAPI / Swagger and Postman collections seed the endpoint map
 - [ ] Headless browser (XSS/CSRF/DOM)
 - [ ] A graph of agents (recon → exploit)
 
