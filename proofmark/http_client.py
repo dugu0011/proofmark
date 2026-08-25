@@ -49,6 +49,14 @@ class RequestLog:
     def __len__(self) -> int:
         return len(self._items)
 
+    def records(self) -> list[dict]:
+        """Every exchange as plain dicts, for the run record and for replay."""
+        return [{
+            "method": ex.request.method, "url": ex.request.url,
+            "headers": ex.request.headers or {}, "body": ex.request.body,
+            "status": ex.status, "error": ex.error,
+        } for ex in self._items]
+
     def summary(self) -> str:
         if not self._items:
             return "(no requests yet)"

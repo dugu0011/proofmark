@@ -25,6 +25,28 @@ If it can't prove it, it doesn't report it.
 The agent runs entirely inside the sandbox, and a scope guard refuses any request
 to a host you didn't authorize — enforced in code, not just asked of the model.
 
+## Every run is signed, verifiable, and replayable
+
+This is the part built for the security team, not just the developer. Every scan
+writes a **tamper-evident run record** to `proofmark_runs/<id>/`: what was
+authorized, every step the agent took, every request it sent, and what it proved
+— with the steps hash-chained so any later edit is provable.
+
+```bash
+proofmark verify proofmark_runs/20260101-120000    # is this record intact?
+proofmark replay proofmark_runs/20260101-120000    # does the exploit still work?
+```
+
+Set a signing key and records become attributable too, not just unaltered:
+
+```bash
+export PROOFMARK_SIGNING_KEY=...    # HMAC-signs every run record
+```
+
+An autonomous agent that *exploits* your systems is only adoptable if you can
+prove afterwards exactly what it did and that the record wasn't touched. That's
+what this gives you.
+
 ## Install
 
 ```bash
@@ -80,6 +102,11 @@ Early, but it tests **live URLs and code** already.
 - [ ] A richer tool suite: headless browser, HTTP replay/proxy
 - [ ] Fix suggestions in the report
 - [ ] A packaged GitHub Action (not just an example workflow)
+- [x] Recon: crawl, extract forms/params, probe common paths
+- [x] Intercept proxy: capture / mutate / replay requests
+- [x] Signed, verifiable, replayable run records
+- [ ] One-click autofix in the report
+- [ ] Headless browser (XSS/CSRF/DOM)
 - [ ] A graph of agents (recon → exploit)
 
 ## Design
