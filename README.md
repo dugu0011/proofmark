@@ -87,9 +87,22 @@ it.
 
 ### In CI
 
-A ready-to-copy GitHub Actions workflow is in
-[`.github/workflows/example-scan.yml`](.github/workflows/example-scan.yml). It runs
-a scan against a deployed preview URL and fails the job if anything is proven.
+Proofmark ships a packaged GitHub Action — add it to a workflow to gate pull
+requests:
+
+```yaml
+- uses: dugu0011/proofmark@v1
+  with:
+    target: ${{ vars.PREVIEW_URL }}   # a deployed preview you own
+    authorized: "true"
+    strategy: graph                    # recon -> exploit
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+The job fails if a vulnerability is proven (configurable with `fail-on-findings`),
+and the report is uploaded as an artifact. A full example is in
+[`.github/workflows/example-scan.yml`](.github/workflows/example-scan.yml).
 
 ## Status
 
@@ -102,7 +115,7 @@ Early, but it tests **live URLs and code** already.
       This is the edge: *code in, running exploit out* — not static guessing.
 - [ ] A richer tool suite: headless browser, HTTP replay/proxy
 - [ ] Fix suggestions in the report
-- [ ] A packaged GitHub Action (not just an example workflow)
+- [x] A packaged GitHub Action — `uses: dugu0011/proofmark@v1`
 - [x] Recon: crawl, extract forms/params, probe common paths
 - [x] Intercept proxy: capture / mutate / replay requests
 - [x] Signed, verifiable, replayable run records

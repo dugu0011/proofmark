@@ -1,0 +1,88 @@
+name: "Proofmark"
+description: "Run the Proofmark AI security agent and prove real vulnerabilities in a target you own."
+author: "dugu0011"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  target:
+    description: "A live URL, a git repo, or a path in the checkout to test."
+    required: true
+  authorized:
+    description: "Must be 'true' to assert you are authorized to test the target."
+    required: true
+    default: "false"
+  model:
+    description: "LLM in litellm form (e.g. anthropic/claude-sonnet-4-6, openai/gpt-4o)."
+    required: false
+    default: "anthropic/claude-sonnet-4-6"
+  strategy:
+    description: "single agent, or a recon->exploit graph of agents."
+    required: false
+    default: "single"
+  operator:
+    description: "Recorded in the run record as who authorized the run."
+    required: false
+    default: "github-actions"
+  fail-on-findings:
+    description: "Fail the job if any vulnerability is proven."
+    required: false
+    default: "true"
+  extra-args:
+    description: "Any additional proofmark scan flags."
+    required: false
+    default: ""
+
+outputs:
+  report:
+    description: "Path to the Markdown report."
+    value: "proofmark-report.md"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Assert authorization
+      shell: bash
+      run: |
+        if [ "${{ inputs.authorized }}" != "true" ]; then
+          echo "::error::Proofmark actively exploits its target. Set 'authorized: true' only for a target you are permitted to test."
+          exit 1
+        fi
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install Proofmark
+      shell: bash
+      run: pip install "${{ github.action_path }}"
+
+    - name: Run the security agent
+      shell: bash
+      run: |
+        set -o pipefail
+        FAIL_FLAG=""
+        proofmark scan \
+          -t "${{ inputs.target }}" \
+          --authorized \
+          --operator "${{ inputs.operator }}" \
+          --model "${{ inputs.model }}" \
+          --strategy "${{ inputs.strategy }}" \
+          -o proofmark-report.md \
+          ${{ inputs.extra-args }} && CODE=0 || CODE=$?
+        echo "proofmark exit: $CODE"
+        # exit 1 from proofmark means findings were proven
+        if [ "$CODE" = "1" ] && [ "${{ inputs.fail-on-findings }}" = "true" ]; then
+          echo "::error::Proofmark proved at least one vulnerability. See proofmark-report.md."
+          exit 1
+        fi
+        if [ "$CODE" -gt 1 ]; then exit "$CODE"; fi
+
+    - name: Upload the report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: proofmark-report
+        path: proofmark-report.md
+        if-no-files-found: ignore
