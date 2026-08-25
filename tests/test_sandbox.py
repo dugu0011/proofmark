@@ -6,7 +6,8 @@ import pytest
 
 from proofmark.authorization import Authorization
 from proofmark.sandbox import Sandbox, SandboxError
-from proofmark.tools.http_request import HttpRequestTool
+from proofmark.tools.http_tools import HttpRequestTool
+from proofmark.http_client import HttpClient, RequestLog
 
 
 def _docker_ok() -> bool:
@@ -36,15 +37,16 @@ def test_the_runner_is_installed_outside_the_tmpfs():
 def test_the_http_tool_reaches_an_in_scope_host():
     with Sandbox() as sb:
         auth = Authorization.grant("https://api.github.com/zen", "tester", [])
-        result = HttpRequestTool(sb, auth).run(method="GET", url="https://api.github.com/zen")
-        data = json.loads(result.output)
-        assert data.get("status") == 200
+        client = HttpClient(sb, auth, RequestLog())
+        result = HttpRequestTool(client).run(method="GET", url="https://api.github.com/zen")
+        assert "HTTP 200" in result.output and not result.is_error
 
 
 def test_the_http_tool_refuses_out_of_scope():
     with Sandbox() as sb:
         auth = Authorization.grant("https://api.github.com/zen", "tester", [])
-        result = HttpRequestTool(sb, auth).run(
+        client = HttpClient(sb, auth, RequestLog())
+        result = HttpRequestTool(client).run(
             method="GET", url="http://169.254.169.254/latest/meta-data/")
         assert result.is_error
 
@@ -69,3 +71,39 @@ def test_reading_outside_the_source_root_is_refused():
     with Sandbox() as sb:
         result = ReadFileTool(sb).run(path="../../etc/passwd")
         assert result.is_error
+
+
+def test_capture_then_replay_with_a_mutation():
+    """The proxy loop: send a request, then replay it with a changed field."""
+    from proofmark.http_client import HttpClient, RequestLog
+    from proofmark.tools.http_tools import HttpRequestTool, ListRequestsTool, ReplayRequestTool
+    from proofmark.authorization import Authorization
+
+    with Sandbox() as sb:
+        auth = Authorization.grant("https://httpbingo.org/anything", "tester", [])
+        client = HttpClient(sb, auth, RequestLog())
+
+        sent = HttpRequestTool(client).run(method="GET", url="https://httpbingo.org/anything")
+        assert "request #0" in sent.output
+
+        listed = ListRequestsTool(client).run()
+        assert "[0] GET" in listed.output
+
+        # replay #0 as a POST with a body — the mutation the agent would make
+        replayed = ReplayRequestTool(client).run(index=0, method="POST", body="probe=1")
+        assert "replay of #0 as #1" in replayed.output and not replayed.is_error
+        assert len(client.log) == 2
+
+
+def test_replay_out_of_scope_is_still_refused():
+    from proofmark.http_client import HttpClient, RequestLog, Request
+    from proofmark.tools.http_tools import ReplayRequestTool
+    from proofmark.authorization import Authorization
+    with Sandbox() as sb:
+        auth = Authorization.grant("https://api.github.com/zen", "tester", [])
+        log = RequestLog()
+        client = HttpClient(sb, auth, log)
+        # seed a logged request, then try to replay it pointed at a new host
+        client.send(Request("GET", "https://api.github.com/zen"))
+        out = ReplayRequestTool(client).run(index=0, url="https://evil.test/x")
+        assert out.is_error and "outside the authorized scope" in out.output

@@ -22,9 +22,10 @@ from proofmark.llm import LLM
 from proofmark.report import to_markdown
 from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
-    HttpRequestTool, ListFilesTool, ReadFileTool, RecordFindingTool,
-    RunCommandTool, SearchCodeTool,
+    HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, RecordFindingTool,
+    ReplayRequestTool, RunCommandTool, SearchCodeTool,
 )
+from proofmark.http_client import HttpClient, RequestLog
 from proofmark.source import prepare as prepare_source, SourceError
 from proofmark.prompts import code_mode_note
 
@@ -116,13 +117,19 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, max_steps, 
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
+                client = HttpClient(sandbox, auth, RequestLog())
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
-                    RunCommandTool(sandbox), HttpRequestTool(sandbox, auth), RecordFindingTool(),
+                    RunCommandTool(sandbox), HttpRequestTool(client),
+                    ListRequestsTool(client), ReplayRequestTool(client), RecordFindingTool(),
                 ]
                 suffix = code_mode_note()
             else:
-                tools = [HttpRequestTool(sandbox, auth), RunCommandTool(sandbox), RecordFindingTool()]
+                client = HttpClient(sandbox, auth, RequestLog())
+                tools = [
+                    HttpRequestTool(client), ListRequestsTool(client), ReplayRequestTool(client),
+                    RunCommandTool(sandbox), RecordFindingTool(),
+                ]
                 suffix = ""
 
             registry = build_registry(tools)
