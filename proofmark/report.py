@@ -1,0 +1,69 @@
+"""Turn a run into a report a developer can act on.
+
+Markdown, because it reads fine in a terminal, renders in a PR comment, and
+converts to anything else. Every finding leads with its proof — the report is
+only as trustworthy as the reproduction behind each claim.
+"""
+from __future__ import annotations
+
+from proofmark.agent import Outcome
+from proofmark.authorization import Authorization
+from proofmark.findings import Finding, Severity
+
+_ICON = {
+    Severity.CRITICAL: "🔴", Severity.HIGH: "🟠", Severity.MEDIUM: "🟡",
+    Severity.LOW: "🔵", Severity.INFO: "⚪",
+}
+
+
+def to_markdown(outcome: Outcome, auth: Authorization, *, target: str, model: str,
+                product: str) -> str:
+    findings = sorted(outcome.findings, key=lambda f: -f.severity.rank)
+    lines: list[str] = []
+    lines.append(f"# {product} — security assessment")
+    lines.append("")
+    lines.append(f"**Target:** {target}  ")
+    lines.append(f"**Authorized by:** {auth.operator} at {auth.asserted_at.isoformat()}  ")
+    lines.append(f"**Scope:** {', '.join(auth.as_header()['scope'])}  ")
+    lines.append(f"**Engine:** {model}  ")
+    lines.append(f"**Effort:** {outcome.steps_used} step(s); stopped because {outcome.stopped_reason}.")
+    lines.append("")
+
+    # Summary counts.
+    counts = {s: sum(1 for f in findings if f.severity == s) for s in Severity}
+    tally = ", ".join(f"{counts[s]} {s.value}" for s in Severity if counts[s]) or "none"
+    lines.append(f"## Summary")
+    lines.append("")
+    lines.append(f"**{len(findings)} proven finding(s):** {tally}.")
+    if outcome.summary:
+        lines.append("")
+        lines.append(f"> {outcome.summary}")
+    lines.append("")
+
+    if not findings:
+        lines.append("No vulnerabilities were reproduced in this run. Note that a clean run "
+                     "is evidence, not proof of absence — it means the agent could not prove "
+                     "an exploit within its budget, not that none exists.")
+        return "\n".join(lines)
+
+    lines.append("## Findings")
+    lines.append("")
+    for i, f in enumerate(findings, 1):
+        lines.extend(_finding_block(i, f))
+    return "\n".join(lines)
+
+
+def _finding_block(i: int, f: Finding) -> list[str]:
+    out = [
+        f"### {i}. {_ICON[f.severity]} {f.title}",
+        "",
+        f"**Severity:** {f.severity.value}  ",
+    ]
+    if f.location:
+        out.append(f"**Location:** {f.location}  ")
+    out += ["", f.description, "", "**Proof of concept:**", "", "```", f.proof_of_concept.strip(), "```", ""]
+    if f.remediation:
+        out += ["**Remediation:**", "", f.remediation, ""]
+    out.append("---")
+    out.append("")
+    return out

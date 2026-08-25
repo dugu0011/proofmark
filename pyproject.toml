@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "proofmark"
+version = "0.1.0"
+description = "An AI agent that finds and proves real vulnerabilities in code you own."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "dugu0011" }]
+keywords = ["security", "pentest", "ai-agent", "vulnerability", "appsec", "sandbox"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "click>=8.1",
+    "litellm>=1.40",
+    "docker>=7.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+proofmark = "proofmark.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dugu0011/proofmark"
+Issues = "https://github.com/dugu0011/proofmark/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["proofmark"]
