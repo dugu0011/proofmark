@@ -6,11 +6,12 @@ from proofmark.tools.code_tools import ListFilesTool, ReadFileTool, SearchCodeTo
 from proofmark.tools.recon_tool import ReconTool
 from proofmark.tools.fix_tool import ProposeFixTool, FixLog
 from proofmark.tools.browser_tool import BrowserTool
+from proofmark.tools.note_tool import NoteTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
     "HttpRequestTool", "ListRequestsTool", "ReplayRequestTool",
     "RunCommandTool", "RecordFindingTool",
     "ListFilesTool", "ReadFileTool", "SearchCodeTool", "ReconTool",
-    "ProposeFixTool", "FixLog", "BrowserTool",
+    "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool",
 ]

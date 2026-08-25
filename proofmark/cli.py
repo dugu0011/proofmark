@@ -25,8 +25,10 @@ from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
-    ProposeFixTool, FixLog, BrowserTool,
+    ProposeFixTool, FixLog, BrowserTool, NoteTool,
 )
+from proofmark.blackboard import Blackboard
+from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
 from proofmark.http_client import HttpClient, RequestLog, Request
 from proofmark import audit, specs
 from proofmark.source import prepare as prepare_source, SourceError
@@ -82,10 +84,11 @@ def main(ctx: click.Context) -> None:
 @click.option("--allow-host", "allow_hosts", multiple=True, help="Extra host the agent may reach.")
 @click.option("--base-url", default="", help="Base URL to test a spec target against (if the spec omits it).")
 @click.option("--max-steps", default=40, show_default=True, help="Hard cap on agent actions.")
+@click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
-def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, max_steps, time_budget, output, run_dir):
+def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, strategy, max_steps, time_budget, output, run_dir):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model, api_base=api_base,
@@ -170,15 +173,42 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, m
                 ]
                 suffix = spec_briefing
 
-            registry = build_registry(tools)
-            agent = Agent(
-                LLM(model, api_base=api_base), registry, auth,
-                name=NAME, system_suffix=suffix,
-                max_steps=max_steps, time_budget_seconds=time_budget, on_event=_record,
-            )
-            click.echo(f"{C['dim']}─ agent working ─{C['reset']}")
+            llm = LLM(model, api_base=api_base)
+            run_target = source.label if source else target
             started_at = datetime.now(timezone.utc).isoformat()
-            outcome = agent.run(source.label if source else target, cfg.kind)
+            if strategy == "graph":
+                click.echo(f"{C['dim']}─ graph of agents: recon → exploit ─{C['reset']}")
+                blackboard = Blackboard()
+                recon_tools = [
+                    ReconTool(client), HttpRequestTool(client), ListRequestsTool(client),
+                    RunCommandTool(sandbox), NoteTool(blackboard),
+                ]
+                if is_code:
+                    recon_tools = [
+                        ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
+                        RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
+                        NoteTool(blackboard),
+                    ]
+                exploit_tools = tools  # the full offensive set built above
+                phases = [
+                    Phase("recon", RECON_ROLE + ("\n\n" + suffix if suffix else ""),
+                          recon_tools, max_steps=max(8, max_steps // 3)),
+                    Phase("exploit", EXPLOIT_ROLE + ("\n\n" + suffix if suffix else ""),
+                          exploit_tools, max_steps=max_steps),
+                ]
+                coordinator = Coordinator(
+                    llm, auth, name=NAME, phases=phases, blackboard=blackboard,
+                    time_budget_seconds=time_budget, on_event=_record,
+                )
+                outcome = coordinator.run(run_target, cfg.kind)
+            else:
+                click.echo(f"{C['dim']}─ agent working ─{C['reset']}")
+                agent = Agent(
+                    llm, build_registry(tools), auth,
+                    name=NAME, system_suffix=suffix,
+                    max_steps=max_steps, time_budget_seconds=time_budget, on_event=_record,
+                )
+                outcome = agent.run(run_target, cfg.kind)
             finished_at = datetime.now(timezone.utc).isoformat()
             browser.close()
     except SandboxError as exc:

@@ -109,7 +109,7 @@ Early, but it tests **live URLs and code** already.
 - [x] Verified autofix — the agent writes the patch, Proofmark checks it applies
 - [x] Spec inputs — OpenAPI / Swagger and Postman collections seed the endpoint map
 - [x] Headless browser (XSS/CSRF/DOM) — run `proofmark build-sandbox` once to enable
-- [ ] A graph of agents (recon → exploit)
+- [x] A graph of agents (recon → exploit) — `--strategy graph`
 
 ## Design
 
