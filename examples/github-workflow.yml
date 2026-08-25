@@ -1,0 +1,23 @@
+# Example: gate a pull request with Proofmark. Copy into your own repo.
+# Only point this at an environment you are authorized to test — `authorized:
+# true` asserts exactly that, and the run is recorded.
+name: Proofmark security scan
+
+on:
+  pull_request:
+
+jobs:
+  proofmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Proofmark
+        uses: dugu0011/proofmark@v1
+        with:
+          target: ${{ vars.PREVIEW_URL }}     # a deployed preview you own
+          authorized: "true"
+          strategy: graph                      # recon -> exploit
+          operator: ${{ github.actor }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
