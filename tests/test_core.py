@@ -147,3 +147,55 @@ def test_recon_summary_flags_forms_as_injection_points():
     text = summarize(s)
     assert "injection points" in text
     assert "/.env" in text and "HTTP 200" in text
+
+
+# ------------------------------------------------------ structured, deduped findings
+def test_findings_carry_structured_classification():
+    from proofmark.findings import Finding
+    f = Finding.from_tool(
+        title="SQL injection", severity="critical", location="/api/search?q=",
+        description="Union-based SQLi.", proof_of_concept="q=' UNION SELECT ... -> dump",
+        owasp_category="A03:2021 Injection", cwe="CWE-89", confidence="high")
+    assert f.owasp_category == "A03:2021 Injection"
+    assert f.cwe == "CWE-89"
+    assert f.confidence == "high"
+
+
+def test_bad_confidence_falls_back_to_medium():
+    from proofmark.findings import Finding
+    f = Finding.from_tool(title="x", severity="low", proof_of_concept="p", confidence="very-sure")
+    assert f.confidence == "medium"
+
+
+def test_the_same_finding_is_not_recorded_twice():
+    from proofmark.tools.base import ToolRegistry
+    from proofmark.tools.record_finding import RecordFindingTool
+    from proofmark.findings import Finding
+
+    reg = ToolRegistry([RecordFindingTool()])
+    args = {"title": "IDOR", "severity": "high", "location": "/api/users/{id}",
+            "description": "cross-user read", "proof_of_concept": "GET /api/users/2 -> 200"}
+    first = reg.dispatch("record_finding", dict(args))
+    assert isinstance(first.data, Finding)
+    # exact same bug, same place -> refused as a duplicate
+    second = reg.dispatch("record_finding", dict(args))
+    assert second.is_error and "Already recorded" in second.output
+    # a different location IS a new finding
+    args2 = dict(args); args2["location"] = "/api/orders/{id}"
+    third = reg.dispatch("record_finding", args2)
+    assert isinstance(third.data, Finding)
+
+
+def test_report_shows_confidence_and_classification():
+    from proofmark.report import to_markdown
+    from proofmark.agent import Outcome
+    from proofmark.findings import Finding
+    from proofmark.authorization import Authorization
+    auth = Authorization.grant("https://app.test", "me")
+    f = Finding.from_tool(title="SQLi", severity="critical", location="/search",
+                          description="d", proof_of_concept="p",
+                          owasp_category="A03:2021 Injection", cwe="CWE-89", confidence="high")
+    md = to_markdown(Outcome(findings=[f], summary="s", steps_used=3, stopped_reason="agent finished"),
+                     auth, target="https://app.test", model="m", product="Proofmark")
+    assert "Confidence:** high" in md
+    assert "A03:2021 Injection" in md and "CWE-89" in md

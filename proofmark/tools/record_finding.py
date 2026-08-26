@@ -24,7 +24,11 @@ class RecordFindingTool(Tool):
         "properties": {
             "title": {"type": "string"},
             "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "info"]},
+            "confidence": {"type": "string", "enum": ["high", "medium", "low"],
+                           "description": "How sure you are you PROVED a real exploit. Be honest."},
             "location": {"type": "string", "description": "Endpoint, parameter, or file:line."},
+            "owasp_category": {"type": "string", "description": "OWASP category, e.g. 'A01:2021 Broken Access Control'."},
+            "cwe": {"type": "string", "description": "CWE id, e.g. 'CWE-89'."},
             "description": {"type": "string", "description": "What the issue is and its impact."},
             "proof_of_concept": {
                 "type": "string",
@@ -35,6 +39,10 @@ class RecordFindingTool(Tool):
         "required": ["title", "severity", "description", "proof_of_concept"],
     }
 
+    def __init__(self) -> None:
+        # Track what has been recorded so the same bug is never reported twice.
+        self._seen: set[str] = set()
+
     def run(self, **kwargs) -> ToolResult:
         if not str(kwargs.get("proof_of_concept", "")).strip():
             return ToolResult(
@@ -43,7 +51,15 @@ class RecordFindingTool(Tool):
                 is_error=True,
             )
         finding = Finding.from_tool(**kwargs)
+        fp = finding.fingerprint()
+        if fp in self._seen:
+            return ToolResult(
+                f"Already recorded: {finding.title} at {finding.location or 'this location'}. "
+                "Move on to something else.",
+                is_error=True,
+            )
+        self._seen.add(fp)
         return ToolResult(
-            f"Recorded [{finding.severity.value}] {finding.title}.",
+            f"Recorded [{finding.severity.value}/{finding.confidence}] {finding.title}.",
             data=finding,
         )

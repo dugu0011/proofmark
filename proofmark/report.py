@@ -59,10 +59,14 @@ def _finding_block(i: int, f: Finding) -> list[str]:
     out = [
         f"### {i}. {_ICON[f.severity]} {f.title}",
         "",
-        f"**Severity:** {f.severity.value}  ",
+        f"**Severity:** {f.severity.value}  &nbsp; **Confidence:** {f.confidence}  ",
     ]
     if f.location:
         out.append(f"**Location:** {f.location}  ")
+    if f.owasp_category:
+        out.append(f"**OWASP:** {f.owasp_category}  ")
+    if f.cwe:
+        out.append(f"**CWE:** {f.cwe}  ")
     out += ["", f.description, "", "**Proof of concept:**", "", "```", f.proof_of_concept.strip(), "```", ""]
     if f.remediation:
         out += ["**Remediation:**", "", f.remediation, ""]
