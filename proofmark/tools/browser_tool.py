@@ -21,6 +21,7 @@ _RUNNER = Path(__file__).parent.parent / "resources" / "browser_runner.py"
 
 class BrowserTool(Tool):
     name = "browser"
+    returns_untrusted_data = True
     description = (
         "Load a URL in a real headless browser (JavaScript runs) to test client-side "
         "issues — reflected/stored/DOM XSS, CSRF flows. You can fill a field, click a "

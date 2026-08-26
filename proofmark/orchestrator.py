@@ -30,6 +30,9 @@ class Phase:
     role_prompt: str
     tools: list[Tool]
     max_steps: int = 20
+    # Optional model for just this phase — lets recon run on a fast/cheap model and
+    # exploitation on a stronger one. None falls back to the coordinator's model.
+    llm: "LLM | None" = None
 
 
 class Coordinator:
@@ -71,7 +74,7 @@ class Coordinator:
 
             remaining = max(1, int(self._deadline - time.time()))
             agent = Agent(
-                self._llm, ToolRegistry(phase.tools), self._auth,
+                phase.llm or self._llm, ToolRegistry(phase.tools), self._auth,
                 name=f"{self._name}:{phase.name}",
                 system_suffix=suffix, max_steps=phase.max_steps,
                 time_budget_seconds=remaining, on_event=self._emit, steer_fn=self._steer,

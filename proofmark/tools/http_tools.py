@@ -13,6 +13,7 @@ from proofmark.tools.base import Tool, ToolResult
 
 class HttpRequestTool(Tool):
     name = "http_request"
+    returns_untrusted_data = True
     description = (
         "Send an HTTP request to the target and get the response. Use it to probe "
         "endpoints and test a hypothesis. Only hosts within the authorized scope "
@@ -53,6 +54,7 @@ class ListRequestsTool(Tool):
 
 class ReplayRequestTool(Tool):
     name = "replay_request"
+    returns_untrusted_data = True
     description = (
         "Resend a previous request with fields changed — the core of confirming a "
         "bug. Give the request number from list_requests and override any of method, "
@@ -85,4 +87,8 @@ class ReplayRequestTool(Tool):
             body=kwargs["body"] if "body" in kwargs else base.body,
         )
         ok, text, ex = self._client.send(req)
+        if ok:
+            # A reproduced live response is the corroboration that lets a finding
+            # earn "high" confidence rather than "I think" — see record_finding.
+            self._client.log.replays_ok += 1
         return ToolResult(f"[replay of #{original.index} as #{ex.index}] {text}", is_error=not ok)

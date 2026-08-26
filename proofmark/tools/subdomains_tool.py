@@ -16,6 +16,7 @@ from proofmark.tools.base import Tool, ToolResult
 
 class SubdomainTool(Tool):
     name = "subdomains"
+    returns_untrusted_data = True
     description = (
         "Discover subdomains of the target's domain passively, from public "
         "Certificate Transparency logs. Does not probe the subdomains. Names in the "

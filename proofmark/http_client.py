@@ -37,6 +37,10 @@ class Exchange:
 class RequestLog:
     def __init__(self) -> None:
         self._items: list[Exchange] = []
+        # How many replays reproduced a live response. A finding only earns "high"
+        # confidence once the exploit was reproduced a second time (see the record
+        # tool) — this is that corroboration counter.
+        self.replays_ok = 0
 
     def add(self, request: Request, status, preview, error=None) -> Exchange:
         ex = Exchange(len(self._items), request, status, preview, error)
@@ -70,10 +74,25 @@ class RequestLog:
 class HttpClient:
     """Sends requests from inside the sandbox, within scope, and logs them."""
 
-    def __init__(self, sandbox: Sandbox, authorization: Authorization, log: RequestLog) -> None:
+    # State-changing methods a "safe mode" run refuses, so the agent can be pointed
+    # at production without risk of deleting or overwriting data. Impact is proven
+    # with reads instead (e.g. GET another user's record to show broken access).
+    DESTRUCTIVE = {"DELETE", "PUT", "PATCH"}
+
+    def __init__(self, sandbox: Sandbox, authorization: Authorization, log: RequestLog,
+                 *, safe_mode: bool = True) -> None:
         self._sb = sandbox
         self._auth = authorization
         self.log = log
+        self.safe_mode = safe_mode
+        # In-run cache of idempotent responses, so re-fetching the same page does
+        # not cost another sandbox round-trip or another wall of tokens.
+        self._cache: dict[str, tuple] = {}
+
+    @staticmethod
+    def _cache_key(request: "Request") -> str:
+        h = json.dumps(request.headers or {}, sort_keys=True)
+        return f"{request.method.upper()}\n{request.url}\n{h}\n{request.body or ''}"
 
     def raw(self, request: Request) -> dict | None:
         """Scope-checked, sandboxed fetch that returns the FULL parsed response.
@@ -109,6 +128,24 @@ class HttpClient:
             ex = self.log.add(request, None, "", error="out of scope")
             return False, msg, ex
 
+        if self.safe_mode and request.method.upper() in self.DESTRUCTIVE:
+            msg = (f"Refused in safe mode: {request.method.upper()} is a state-changing "
+                   "method that could damage or delete data on a live target. Prove "
+                   "impact with a non-destructive request instead — e.g. GET another "
+                   "user's record to demonstrate broken access control. (Safe mode can "
+                   "be turned off for this run if a destructive test is truly required.)")
+            ex = self.log.add(request, None, "", error="blocked by safe mode")
+            return False, msg, ex
+
+        key = self._cache_key(request) if request.method.upper() in ("GET", "HEAD") else None
+        if key is not None and key in self._cache:
+            status, preview, first_idx = self._cache[key]
+            ex = self.log.add(request, status, preview)
+            text = (f"[cached — identical to request #{first_idx}] HTTP {status}. Response "
+                    "unchanged since then; body omitted to save time. Use "
+                    f"replay_request #{first_idx} or list_requests if you need it again.")
+            return True, text, ex
+
         spec = json.dumps({
             "method": request.method, "url": request.url,
             "headers": request.headers or {}, "body": request.body, "timeout": 20,
@@ -128,6 +165,8 @@ class HttpClient:
         status = data.get("status")
         preview = (data.get("body") or "")[:1200]
         ex = self.log.add(request, status, preview)
+        if key is not None:
+            self._cache[key] = (status, preview, ex.index)
         headers = data.get("headers", {})
         text = (f"HTTP {status}  ({data.get('elapsed_ms','?')} ms)\n"
                 f"headers: {json.dumps(headers)[:400]}\n"

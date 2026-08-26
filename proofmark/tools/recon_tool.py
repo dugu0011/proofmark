@@ -8,6 +8,7 @@ from proofmark.tools.base import Tool, ToolResult
 
 class ReconTool(Tool):
     name = "recon"
+    returns_untrusted_data = True
     description = (
         "Map the target's attack surface: crawl same-host links, extract forms and "
         "their parameters, and probe common paths (.env, .git, admin, api). Run this "

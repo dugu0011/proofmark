@@ -17,7 +17,9 @@ class RecordFindingTool(Tool):
         "Record a vulnerability you have PROVEN. Only call this after you have a "
         "concrete proof-of-concept that reproduces the issue — the request you sent "
         "and the response that demonstrates the impact. Do not record anything you "
-        "have not actually reproduced."
+        "have not actually reproduced. To rate a live finding 'high' confidence, you "
+        "must first reproduce the exploit a second time with replay_request — proof, "
+        "not a single lucky response."
     )
     parameters = {
         "type": "object",
@@ -39,9 +41,13 @@ class RecordFindingTool(Tool):
         "required": ["title", "severity", "description", "proof_of_concept"],
     }
 
-    def __init__(self) -> None:
+    def __init__(self, log=None, *, require_replay: bool = False) -> None:
         # Track what has been recorded so the same bug is never reported twice.
         self._seen: set[str] = set()
+        # For live targets, "high" confidence is earned, not asserted: it requires
+        # the exploit to have been reproduced a second time via replay_request.
+        self._log = log
+        self._require_replay = require_replay
 
     def run(self, **kwargs) -> ToolResult:
         if not str(kwargs.get("proof_of_concept", "")).strip():
@@ -50,6 +56,13 @@ class RecordFindingTool(Tool):
                 "then record it with the request and response that prove it.",
                 is_error=True,
             )
+        downgraded = False
+        if self._require_replay and str(kwargs.get("confidence", "")).lower() == "high":
+            reproduced = self._log is not None and self._log.replays_ok > 0
+            if not reproduced:
+                kwargs = {**kwargs, "confidence": "medium"}
+                downgraded = True
+
         finding = Finding.from_tool(**kwargs)
         fp = finding.fingerprint()
         if fp in self._seen:
@@ -59,7 +72,12 @@ class RecordFindingTool(Tool):
                 is_error=True,
             )
         self._seen.add(fp)
+        note = ""
+        if downgraded:
+            note = (" Confidence lowered to medium: I have no record of this exploit "
+                    "being reproduced. Reproduce it with replay_request, then re-recording "
+                    "it can be rated high.")
         return ToolResult(
-            f"Recorded [{finding.severity.value}/{finding.confidence}] {finding.title}.",
+            f"Recorded [{finding.severity.value}/{finding.confidence}] {finding.title}.{note}",
             data=finding,
         )

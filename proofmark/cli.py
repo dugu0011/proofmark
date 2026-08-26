@@ -80,22 +80,26 @@ def main(ctx: click.Context) -> None:
 @click.option("--authorized", is_flag=True, help="Assert you are authorized to test this target.")
 @click.option("--operator", default="", help="Who is running this (recorded in the report).")
 @click.option("--model", default=DEFAULT_MODEL, show_default=True, help="LLM, litellm-style.")
+@click.option("--recon-model", default="", help="Model for the recon phase of --strategy graph (defaults to --model).")
+@click.option("--exploit-model", default="", help="Model for the exploit phase of --strategy graph (defaults to --model).")
 @click.option("--api-base", default="", help="Custom API base (e.g. Azure endpoint).")
 @click.option("--allow-host", "allow_hosts", multiple=True, help="Extra host the agent may reach.")
 @click.option("--base-url", default="", help="Base URL to test a spec target against (if the spec omits it).")
 @click.option("--max-steps", default=40, show_default=True, help="Hard cap on agent actions.")
+@click.option("--safe-mode/--no-safe-mode", default=True, show_default=True, help="Block destructive HTTP methods (PUT/PATCH/DELETE) so it is safe against production.")
 @click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, strategy, max_steps, time_budget, output, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, time_budget, output, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
-        target=target, kind=_classify(target), model=model, api_base=api_base,
+        target=target, kind=_classify(target), model=model,
+        recon_model=recon_model, exploit_model=exploit_model, api_base=api_base,
         operator=operator, allow_hosts=list(allow_hosts), max_steps=max_steps,
-        time_budget_seconds=time_budget, output_path=output,
+        safe_mode=safe_mode, time_budget_seconds=time_budget, output_path=output,
     )
 
     if not authorized:
@@ -185,27 +189,31 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
-                client = HttpClient(sandbox, auth, req_log)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode)
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
                     RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client),
-                    ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(),
+                    ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(req_log, require_replay=not is_code),
                 ]
                 suffix = code_mode_note()
             else:
-                client = HttpClient(sandbox, auth, req_log)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode)
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), RunCommandTool(sandbox),
-                    browser, RecordFindingTool(),
+                    browser, RecordFindingTool(req_log, require_replay=not is_code),
                 ]
                 suffix = spec_briefing
 
             llm = LLM(model, api_base=api_base)
             run_target = source.label if source else target
             started_at = datetime.now(timezone.utc).isoformat()
+            recon_llm = LLM(cfg.recon_model, api_base=api_base) if cfg.recon_model else llm
+            exploit_llm = LLM(cfg.exploit_model, api_base=api_base) if cfg.exploit_model else llm
             if strategy == "graph":
+                if cfg.recon_model or cfg.exploit_model:
+                    click.echo(f"{C['dim']}models: recon {recon_llm.model} · exploit {exploit_llm.model}{C['reset']}")
                 click.echo(f"{C['dim']}─ graph of agents: recon → exploit ─{C['reset']}")
                 blackboard = Blackboard()
                 recon_tools = [
@@ -221,9 +229,9 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
                 exploit_tools = tools  # the full offensive set built above
                 phases = [
                     Phase("recon", RECON_ROLE + ("\n\n" + suffix if suffix else ""),
-                          recon_tools, max_steps=max(8, max_steps // 3)),
+                          recon_tools, max_steps=max(8, max_steps // 3), llm=recon_llm),
                     Phase("exploit", EXPLOIT_ROLE + ("\n\n" + suffix if suffix else ""),
-                          exploit_tools, max_steps=max_steps),
+                          exploit_tools, max_steps=max_steps, llm=exploit_llm),
                 ]
                 coordinator = Coordinator(
                     llm, auth, name=NAME, phases=phases, blackboard=blackboard,
@@ -273,7 +281,13 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
     for i, fx in enumerate(fix_log.fixes, 1):
         (out_dir / f"fix-{i}.patch").write_text(fx["diff"] + "\n", encoding="utf-8")
     (out_dir / "report.md").write_text(report, encoding="utf-8")
-    signed = "signed" if __import__("os").environ.get(audit.SIGNING_KEY_ENV) else "unsigned"
+    _env = __import__("os").environ
+    if _env.get(audit.SIGNING_PRIVATE_ENV):
+        signed = "ed25519-signed"
+    elif _env.get(audit.SIGNING_KEY_ENV):
+        signed = "hmac-signed"
+    else:
+        signed = "unsigned"
     click.echo(f"{C['dim']}run record ({signed}, verifiable) → {out_dir}{C['reset']}")
     if output:
         Path(output).write_text(report, encoding="utf-8")
@@ -380,6 +394,34 @@ def build_sandbox():
         except subprocess.CalledProcessError as exc:
             _fail(f"docker build failed (exit {exc.returncode}).")
     click.echo(f"{C['green']}\u2713{C['reset']} browser sandbox built. The `browser` tool is now available.")
+
+
+@main.command()
+def keygen():
+    """Generate an ed25519 signing keypair for public-key run-record signatures.
+
+    Set the private key as PROOFMARK_SIGNING_PRIVATE_KEY to sign runs; publish the
+    public key so anyone can verify a report is authentic — without your secret.
+    """
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+    except ImportError:
+        _fail("this needs the 'cryptography' package: pip install cryptography")
+    priv = Ed25519PrivateKey.generate()
+    seed = priv.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+        serialization.NoEncryption()).hex()
+    pub = priv.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
+    click.echo(f"{C['b']}Ed25519 signing keypair{C['reset']}")
+    click.echo(f"{C['dim']}Keep the private key secret; publish the public key.{C['reset']}\n")
+    click.echo(f"{C['yellow']}PROOFMARK_SIGNING_PRIVATE_KEY{C['reset']}={seed}")
+    click.echo(f"{C['green']}PROOFMARK_SIGNING_PUBLIC_KEY{C['reset']}=ed25519:{pub}")
+    click.echo(f"\n{C['dim']}Signed runs embed the public key, so `proofmark verify <run>` "
+               f"checks integrity with no secret. Pin PROOFMARK_SIGNING_PUBLIC_KEY to also "
+               f"assert the signer's identity.{C['reset']}")
+    sys.exit(0)
 
 
 @main.command()

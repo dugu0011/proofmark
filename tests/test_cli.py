@@ -14,6 +14,7 @@ EXPECTED_OPTIONS = [
     "--target", "--authorized", "--operator", "--model", "--strategy",
     "--max-steps", "--time-budget", "--run-dir", "--output",
     "--events-file", "--control-file", "--base-url", "--allow-host",
+    "--safe-mode", "--recon-model", "--exploit-model",
 ]
 
 
@@ -34,5 +35,5 @@ def test_scan_refuses_without_authorization():
 
 def test_top_level_commands_exist():
     result = CliRunner().invoke(main, ["--help"])
-    for cmd in ("scan", "verify", "replay", "doctor", "mcp", "build-sandbox"):
+    for cmd in ("scan", "verify", "replay", "doctor", "mcp", "build-sandbox", "keygen"):
         assert cmd in result.output

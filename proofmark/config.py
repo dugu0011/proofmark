@@ -30,25 +30,43 @@ class RunConfig:
     target: str
     kind: str            # "url" | "repo" | "path"
     model: str = DEFAULT_MODEL
+    # Optional split-brain models for the recon->exploit graph: a fast/cheap model
+    # can map the surface while a stronger one does the reasoning-heavy exploitation.
+    # Empty means "use `model` for that phase too".
+    recon_model: str = ""
+    exploit_model: str = ""
     api_base: str = ""
     operator: str = ""
     allow_hosts: list[str] = field(default_factory=list)
     max_steps: int = 40
     time_budget_seconds: int = 600
     output_path: str = ""
+    # Safe mode blocks destructive HTTP methods (PUT/PATCH/DELETE) so the agent can
+    # run against production without risk of altering data. On by default.
+    safe_mode: bool = True
 
-    def key_env_var(self) -> str | None:
+    @staticmethod
+    def key_env_var_for(model: str) -> str | None:
         for prefix, var in _PROVIDER_PREFIXES.items():
-            if self.model.startswith(prefix):
+            if model.startswith(prefix):
                 return var
         for alias, var in _PROVIDER_ALIASES.items():
-            if alias in self.model:
+            if alias in model:
                 return var
         return None
 
+    def key_env_var(self) -> str | None:
+        return self.key_env_var_for(self.model)
+
+    def models_in_use(self) -> list[str]:
+        """Every distinct model this run will actually invoke."""
+        return list(dict.fromkeys(m for m in (
+            self.model, self.recon_model, self.exploit_model) if m))
+
     def missing_key(self) -> str | None:
-        """The env var the chosen model needs, if it is not set. None if fine."""
-        var = self.key_env_var()
-        if var and not os.environ.get(var):
-            return var
+        """The env var some chosen model needs but that is not set. None if fine."""
+        for model in self.models_in_use():
+            var = self.key_env_var_for(model)
+            if var and not os.environ.get(var):
+                return var
         return None

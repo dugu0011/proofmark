@@ -27,6 +27,10 @@ class Tool:
     description: str = ""
     # JSON-schema of the arguments, OpenAI function-call style.
     parameters: dict = {"type": "object", "properties": {}}
+    # True when the tool's output is content controlled by the TARGET (an HTTP
+    # body, a rendered page, a DNS answer). Such output is data to analyze, never
+    # instructions — the loop fences it so a hostile target cannot inject prompts.
+    returns_untrusted_data: bool = False
 
     def run(self, **kwargs) -> ToolResult:  # pragma: no cover - overridden
         raise NotImplementedError
@@ -48,6 +52,11 @@ class ToolRegistry:
 
     def specs(self) -> list[dict]:
         return [t.spec() for t in self._tools.values()]
+
+    def untrusted(self, name: str) -> bool:
+        """Does this tool return target-controlled data that must be fenced?"""
+        tool = self._tools.get(name)
+        return bool(tool and getattr(tool, "returns_untrusted_data", False))
 
     def dispatch(self, name: str, arguments: str | dict) -> ToolResult:
         tool = self._tools.get(name)

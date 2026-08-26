@@ -36,7 +36,11 @@ signed, replayable record of everything the agent did.
 - **Multi-agent** — a recon agent maps the target, then an exploit agent proves what it can, sharing a blackboard.
 - **Any target** — a live URL, a local codebase, a git repo, an OpenAPI/Swagger spec, or a Postman collection.
 - **Enforced authorization** — scope is checked in code, not asked of the model. Out-of-scope requests are refused before they leave the process.
-- **Signed, replayable run records** — every run is tamper-evident and can be re-verified and replayed. *This is the part a security team needs before it will let an agent exploit its systems — and no other tool in this space has it.*
+- **Signed, replayable run records** — every run is tamper-evident and can be re-verified and replayed. With a public-key (ed25519) signature, *anyone* can verify a report is authentic without your secret. *This is the part a security team needs before it will let an agent exploit its systems — and no other tool in this space has it.*
+- **Safe against production** — safe mode blocks destructive HTTP methods (PUT/PATCH/DELETE), so the agent proves impact with reads, never by altering data.
+- **Prompt-injection resistant** — everything the target returns is fenced as untrusted data, so a hostile page can't hijack the agent with "ignore previous instructions."
+- **Earned confidence** — a live finding is only rated *high* after the exploit reproduces a second time via replay. One response is a claim; two is proof.
+- **Split-brain models** — run recon on a fast, cheap model and exploitation on a stronger one, cutting cost and time without losing reasoning where it matters.
 - **Provider-agnostic** — OpenAI, Anthropic, Azure and more, via LiteLLM.
 
 ## Why Proofmark is different
@@ -115,6 +119,23 @@ agent** maps the target and is told explicitly *not* to exploit — it records w
 it finds — then an **exploit agent** starts from that map and proves what it can.
 Findings from every phase aggregate, and the authorization gate and signed record
 wrap the whole graph.
+
+## Trust & safety
+
+Proofmark is built to be pointed at real systems and believed:
+
+- **Public-key signatures.** Generate a keypair with `proofmark keygen`, set `PROOFMARK_SIGNING_PRIVATE_KEY` to sign runs, and publish `PROOFMARK_SIGNING_PUBLIC_KEY`. Signed records embed the public key, so `proofmark verify <run>` confirms integrity with **no secret** — and pinning the public key also asserts *who* signed it.
+- **Safe mode (default on).** Destructive methods are refused before they leave the process. Pass `--no-safe-mode` only when a state-changing test is genuinely required and authorized.
+- **Untrusted-data fencing.** Target responses are wrapped in explicit markers and the agent is told they are data, never instructions — defusing prompt injection served by a hostile target.
+- **Replay-gated confidence.** `high` confidence on a live target requires the exploit to reproduce on replay; otherwise it is recorded as `medium`.
+
+```bash
+proofmark keygen                                  # make a signing keypair
+export PROOFMARK_SIGNING_PRIVATE_KEY=...           # sign every run
+proofmark scan -t https://app.you.own --authorized --strategy graph \
+  --recon-model openai/gpt-4o-mini --exploit-model anthropic/claude-opus-4-1
+proofmark verify proofmark_runs/<run-id>           # anyone can verify, no secret
+```
 
 ## Usage
 

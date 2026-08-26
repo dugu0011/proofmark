@@ -24,8 +24,55 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 GENESIS = "0" * 64
+# HMAC (shared-secret) signing — anyone verifying needs the same secret.
 SIGNING_KEY_ENV = "PROOFMARK_SIGNING_KEY"
+# Ed25519 (public-key) signing — the private key signs, and the matching public
+# key (published, embedded in the record) lets ANYONE verify without a secret.
+# This is the "verify it yourself" property an auditor or customer needs.
+SIGNING_PRIVATE_ENV = "PROOFMARK_SIGNING_PRIVATE_KEY"
+SIGNING_PUBLIC_ENV = "PROOFMARK_SIGNING_PUBLIC_KEY"   # optional pin, checked on verify
 RUNS_DIR = "proofmark_runs"
+
+
+def _load_ed25519_private():
+    """Read PROOFMARK_SIGNING_PRIVATE_KEY as a 64-char hex seed, a PEM string, or a
+    path to a file holding either. Returns a private key object or None."""
+    raw = os.environ.get(SIGNING_PRIVATE_ENV)
+    if not raw:
+        return None
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization  # noqa: F401
+    text = raw.strip()
+    if os.path.exists(text):
+        with open(text, "rb") as fh:
+            blob = fh.read()
+        text = blob.decode("utf-8", "replace").strip()
+        if b"BEGIN" in blob:
+            return serialization.load_pem_private_key(blob, password=None)
+    if "BEGIN" in text:
+        return serialization.load_pem_private_key(text.encode(), password=None)
+    seed = bytes.fromhex(text)
+    if len(seed) != 32:
+        raise ValueError("ed25519 private seed must be 32 bytes (64 hex chars)")
+    return Ed25519PrivateKey.from_private_bytes(seed)
+
+
+def _ed25519_public_hex(priv) -> str:
+    from cryptography.hazmat.primitives import serialization
+    return priv.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
+
+
+def _ed25519_verify(public_field: str, message: str, signature: bytes) -> bool:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.exceptions import InvalidSignature
+    hexkey = public_field.split(":", 1)[1] if ":" in public_field else public_field
+    pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(hexkey))
+    try:
+        pub.verify(signature, message.encode())
+        return True
+    except InvalidSignature:
+        return False
 
 
 def _canonical(obj) -> str:
@@ -77,6 +124,13 @@ class RunRecord:
             "fixes": self.fixes,
             "chain_tip": steps[-1]["hash"] if steps else GENESIS,
         }
+        priv = _load_ed25519_private()
+        if priv is not None:
+            # Public key goes INTO the signed body, so the signature attests to it
+            # too and a verifier reads the signer's identity straight from the record.
+            body["public_key"] = "ed25519:" + _ed25519_public_hex(priv)
+            body["signature"] = "ed25519:" + priv.sign(_canonical(body).encode()).hex()
+            return body
         key = os.environ.get(SIGNING_KEY_ENV)
         if key:
             body["signature"] = "hmac-sha256:" + hmac.new(
@@ -119,6 +173,26 @@ def verify(run_dir: str) -> tuple[bool, str]:
 
     # 2. signature, if the record carries one
     sig = manifest.get("signature")
+    if sig and sig.startswith("ed25519:"):
+        pub = manifest.get("public_key", "")
+        if not pub:
+            return False, "record is ed25519-signed but carries no public key"
+        body = {k: v for k, v in manifest.items() if k != "signature"}
+        try:
+            ok = _ed25519_verify(pub, _canonical(body), bytes.fromhex(sig.split(":", 1)[1]))
+        except ImportError:
+            return False, "install 'cryptography' to verify the ed25519 signature"
+        except ValueError as exc:
+            return False, f"malformed ed25519 signature or key: {exc}"
+        if not ok:
+            return False, "signature does not match — record was altered or wrong key"
+        pinned = os.environ.get(SIGNING_PUBLIC_ENV)
+        if pinned and pinned.strip() != pub:
+            return False, (f"signed by an unexpected key ({pub[:22]}…) — does not match "
+                           f"the pinned {SIGNING_PUBLIC_ENV}")
+        where = " (matches pinned key)" if pinned else ""
+        return True, f"intact and ed25519 signature valid — signer {pub[:24]}…{where}"
+
     if sig:
         key = os.environ.get(SIGNING_KEY_ENV)
         if not key:
