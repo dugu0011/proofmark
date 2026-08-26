@@ -107,11 +107,37 @@ def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, s
     if missing:
         _fail(f"The model '{model}' needs {missing} in your environment. Set it and retry.")
 
+    import json as _json
+
     steps: list[dict] = []
     fix_log = FixLog()
+    _events_fh = open(events_file, "a", encoding="utf-8") if events_file else None
+
     def _record(event: Event) -> None:
         steps.append({"kind": event.kind, "text": event.text, "detail": event.detail})
+        if _events_fh is not None:
+            # one JSON object per line, flushed, so a host can tail it live
+            _events_fh.write(_json.dumps({
+                "ts": __import__("time").time(), "kind": event.kind,
+                "text": event.text, "detail": event.detail,
+            }) + "\n")
+            _events_fh.flush()
         _render(event)
+
+    _control_pos = {"n": 0}
+
+    def _pull_steer() -> list:
+        """New operator instructions appended to the control file since last read."""
+        if not control_file:
+            return []
+        try:
+            with open(control_file, "r", encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+        except OSError:
+            return []
+        new = lines[_control_pos["n"]:]
+        _control_pos["n"] = len(lines)
+        return [l for l in new if l.strip()]
 
     spec_briefing = ""
     if cfg.kind == "spec":
