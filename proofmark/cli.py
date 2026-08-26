@@ -88,6 +88,8 @@ def main(ctx: click.Context) -> None:
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
+@click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
+@click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
 def scan(target, authorized, operator, model, api_base, allow_hosts, base_url, strategy, max_steps, time_budget, output, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
