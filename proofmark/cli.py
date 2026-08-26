@@ -356,22 +356,29 @@ def mcp_cmd():
 def build_sandbox():
     """Build the browser sandbox image (Chromium) used by the `browser` tool."""
     import subprocess
+    import tempfile
     from pathlib import Path as _P
 
-    dockerfile = _P(__file__).parent.parent / "Dockerfile.sandbox"
-    if not dockerfile.exists():
-        _fail("Dockerfile.sandbox not found next to the package.")
-    click.echo(f"{C['dim']}building proofmark-sandbox:latest (this pulls Chromium; a few minutes)…{C['reset']}")
-    try:
-        subprocess.run(
-            ["docker", "build", "-f", str(dockerfile), "-t", "proofmark-sandbox:latest",
-             str(dockerfile.parent)],
-            check=True,
-        )
-    except FileNotFoundError:
-        _fail("docker is not installed or not on PATH.")
-    except subprocess.CalledProcessError as exc:
-        _fail(f"docker build failed (exit {exc.returncode}).")
+    # The Dockerfile is generated here rather than read from disk, so this works
+    # from a pip install (where no repo files ship) exactly as from a checkout.
+    dockerfile = (
+        "FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy\n"
+        "RUN pip install --no-cache-dir playwright==1.47.0\n"
+        "WORKDIR /work\n"
+        'CMD ["sleep", "infinity"]\n'
+    )
+    click.echo(f"{C['dim']}building proofmark-sandbox:latest (pulls Chromium; a few minutes)…{C['reset']}")
+    with tempfile.TemporaryDirectory() as ctx:
+        (_P(ctx) / "Dockerfile").write_text(dockerfile)
+        try:
+            subprocess.run(
+                ["docker", "build", "-t", "proofmark-sandbox:latest", ctx],
+                check=True,
+            )
+        except FileNotFoundError:
+            _fail("docker is not installed or not on PATH.")
+        except subprocess.CalledProcessError as exc:
+            _fail(f"docker build failed (exit {exc.returncode}).")
     click.echo(f"{C['green']}\u2713{C['reset']} browser sandbox built. The `browser` tool is now available.")
 
 
