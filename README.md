@@ -1,20 +1,43 @@
-# Proofmark
+<div align="center">
 
-**The open-source AI pentester that proves what it finds.** Autonomous AI agents
-that run your app in a sandbox, find vulnerabilities, and validate them with a
-real proof-of-concept — never a false positive from a static scanner.
+<img src="assets/proofmark-banner.svg" alt="Proofmark — the AI pentester that proves what it finds" width="840" />
 
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Status](https://img.shields.io/badge/status-alpha-orange)
+<h3>The open-source AI pentester that <em>proves</em> what it finds</h3>
 
-> **Authorized use only.** Proofmark actively exploits the targets you point it
+<p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
+
+<p>
+  <img alt="version" src="https://img.shields.io/badge/version-0.4.0-4f8cff?style=flat-square" />
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
+  <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-67%20passing-22c55e?style=flat-square" />
+  <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
+  <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
+</p>
+
+<p>
+  <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
+  <a href="#trust--safety"><b>Trust &amp; safety</b></a> &nbsp;·&nbsp;
+  <a href="#usage"><b>Usage</b></a> &nbsp;·&nbsp;
+  <a href="#how-it-works"><b>How it works</b></a>
+</p>
+
+</div>
+
+> **⚖️ Authorized use only.** Proofmark actively exploits the targets you point it
 > at. Only run it against systems you own or have explicit, written permission to
 > test. It refuses to start without an explicit `--authorized` assertion, records
 > that assertion in every run, and refuses any request outside the scope you gave
 > it — but the responsibility for having permission is yours.
 
 ---
+
+<div align="center">
+
+**Proof, not suspicion** &nbsp;•&nbsp; **Safe against production** &nbsp;•&nbsp; **Signed & replayable** &nbsp;•&nbsp; **Injection-resistant** &nbsp;•&nbsp; **Priced per run**
+
+</div>
 
 ## Overview
 
@@ -41,6 +64,7 @@ signed, replayable record of everything the agent did.
 - **Prompt-injection resistant** — everything the target returns is fenced as untrusted data, so a hostile page can't hijack the agent with "ignore previous instructions."
 - **Earned confidence** — a live finding is only rated *high* after the exploit reproduces a second time via replay. One response is a claim; two is proof.
 - **Split-brain models** — run recon on a fast, cheap model and exploitation on a stronger one, cutting cost and time without losing reasoning where it matters.
+- **Per-run cost accounting** — every run reports exact tokens and an estimated dollar cost, written into the signed record so what a run cost is attested alongside what it proved.
 - **Provider-agnostic** — OpenAI, Anthropic, Azure and more, via LiteLLM.
 
 ## Why Proofmark is different
