@@ -80,14 +80,31 @@ class HttpClient:
     DESTRUCTIVE = {"DELETE", "PUT", "PATCH"}
 
     def __init__(self, sandbox: Sandbox, authorization: Authorization, log: RequestLog,
-                 *, safe_mode: bool = True) -> None:
+                 *, safe_mode: bool = True, auth_headers: dict | None = None,
+                 auth_cookies: dict | None = None) -> None:
         self._sb = sandbox
         self._auth = authorization
         self.log = log
         self.safe_mode = safe_mode
+        # Credentials attached to every in-scope request, so the agent can test as
+        # an authenticated user — where the interesting authorization bugs live.
+        self._auth_headers = dict(auth_headers or {})
+        self._auth_cookies = dict(auth_cookies or {})
         # In-run cache of idempotent responses, so re-fetching the same page does
         # not cost another sandbox round-trip or another wall of tokens.
         self._cache: dict[str, tuple] = {}
+
+    def _apply_auth(self, headers: dict | None) -> dict:
+        """Merge in the run's credentials. The agent's own headers win, so it can
+        deliberately drop or swap a token to test access control."""
+        merged = {**self._auth_headers, **(headers or {})}
+        if self._auth_cookies and not any(k.lower() == "cookie" for k in merged):
+            merged["Cookie"] = "; ".join(f"{k}={v}" for k, v in self._auth_cookies.items())
+        return merged
+
+    @property
+    def authenticated(self) -> bool:
+        return bool(self._auth_headers or self._auth_cookies)
 
     @staticmethod
     def _cache_key(request: "Request") -> str:
@@ -105,7 +122,7 @@ class HttpClient:
             return None
         spec = json.dumps({
             "method": request.method, "url": request.url,
-            "headers": request.headers or {}, "body": request.body, "timeout": 20,
+            "headers": self._apply_auth(request.headers), "body": request.body, "timeout": 20,
         })
         code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
         try:
@@ -148,7 +165,7 @@ class HttpClient:
 
         spec = json.dumps({
             "method": request.method, "url": request.url,
-            "headers": request.headers or {}, "body": request.body, "timeout": 20,
+            "headers": self._apply_auth(request.headers), "body": request.body, "timeout": 20,
         })
         code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
         out = out.strip()

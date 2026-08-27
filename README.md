@@ -65,6 +65,7 @@ signed, replayable record of everything the agent did.
 - **Earned confidence** — a live finding is only rated *high* after the exploit reproduces a second time via replay. One response is a claim; two is proof.
 - **Split-brain models** — run recon on a fast, cheap model and exploitation on a stronger one, cutting cost and time without losing reasoning where it matters.
 - **Per-run cost accounting** — every run reports exact tokens and an estimated dollar cost, written into the signed record so what a run cost is attested alongside what it proved.
+- **Authenticated testing** — attach a token or session cookie and the agent tests as a logged-in user, where broken access control, IDOR and privilege-escalation bugs actually live.
 - **Provider-agnostic** — OpenAI, Anthropic, Azure and more, via LiteLLM.
 
 ## Why Proofmark is different
@@ -234,6 +235,10 @@ proofmark scan -t ./collection.json --base-url https://api.your-app.test --autho
 
 # A graph of agents: recon maps, exploit proves
 proofmark scan -t https://your-app.test --authorized --strategy graph
+
+# Authenticated: test as a logged-in user (repeatable), to reach authz bugs
+proofmark scan -t https://your-app.test --authorized \
+  --auth-header "Authorization: Bearer <token>" --auth-cookie "session=<value>"
 
 # Write the report to a file (exits non-zero if anything is proven — good for CI)
 proofmark scan -t https://your-app.test --authorized -o report.md

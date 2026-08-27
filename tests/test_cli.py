@@ -15,6 +15,7 @@ EXPECTED_OPTIONS = [
     "--max-steps", "--time-budget", "--run-dir", "--output",
     "--events-file", "--control-file", "--base-url", "--allow-host",
     "--safe-mode", "--recon-model", "--exploit-model",
+    "--auth-header", "--auth-cookie", "--suppress",
 ]
 
 

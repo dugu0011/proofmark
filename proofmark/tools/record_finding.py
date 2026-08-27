@@ -41,15 +41,26 @@ class RecordFindingTool(Tool):
         "required": ["title", "severity", "description", "proof_of_concept"],
     }
 
-    def __init__(self, log=None, *, require_replay: bool = False) -> None:
+    def __init__(self, log=None, *, require_replay: bool = False,
+                 suppress_titles: set | None = None) -> None:
         # Track what has been recorded so the same bug is never reported twice.
         self._seen: set[str] = set()
         # For live targets, "high" confidence is earned, not asserted: it requires
         # the exploit to have been reproduced a second time via replay_request.
         self._log = log
         self._require_replay = require_replay
+        # Titles the operator already judged false positives — the platform's
+        # learning fed back in, so the agent does not re-report a known non-issue.
+        self._suppress = {t.strip().lower() for t in (suppress_titles or set())}
 
     def run(self, **kwargs) -> ToolResult:
+        title = str(kwargs.get("title", "")).strip().lower()
+        if title and title in self._suppress:
+            return ToolResult(
+                f"Skipped: '{kwargs.get('title')}' was previously judged a false positive "
+                "for this target. Do not report it again; look for something else.",
+                is_error=True,
+            )
         if not str(kwargs.get("proof_of_concept", "")).strip():
             return ToolResult(
                 "Refused: a finding needs a proof-of-concept. Reproduce it first, "

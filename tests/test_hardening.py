@@ -244,3 +244,45 @@ def test_run_record_carries_usage_in_the_signed_body():
     )
     body = rec.manifest()
     assert body["usage"]["total_tokens"] == 1234 and body["usage"]["cost_usd"] == 0.05
+
+
+# ------------------------------------------------ authenticated testing + learning
+
+
+def test_auth_credentials_attach_to_every_request():
+    from proofmark.http_client import HttpClient, RequestLog
+    client = HttpClient(None, _auth(), RequestLog(),
+                        auth_headers={"Authorization": "Bearer TOK"},
+                        auth_cookies={"session": "abc", "csrf": "xyz"})
+    assert client.authenticated is True
+    merged = client._apply_auth(None)
+    assert merged["Authorization"] == "Bearer TOK"
+    assert merged["Cookie"] == "session=abc; csrf=xyz"
+    # the agent's own header wins, so it can drop/swap the credential to test authz
+    overridden = client._apply_auth({"Authorization": "Bearer OTHER"})
+    assert overridden["Authorization"] == "Bearer OTHER"
+
+
+def test_no_auth_means_no_headers_added():
+    from proofmark.http_client import HttpClient, RequestLog
+    client = HttpClient(None, _auth(), RequestLog())
+    assert client.authenticated is False
+    assert client._apply_auth({"X": "1"}) == {"X": "1"}
+
+
+def test_split_kv_parses_headers_and_cookies():
+    from proofmark.cli import _split_kv
+    assert _split_kv("Authorization: Bearer abc", prefer_colon=True) == ("Authorization", "Bearer abc")
+    assert _split_kv("session=abc", prefer_colon=False) == ("session", "abc")
+
+
+def test_a_known_false_positive_title_is_not_reported():
+    from proofmark.tools.record_finding import RecordFindingTool
+    tool = RecordFindingTool(suppress_titles={"reflected xss"})
+    res = tool.run(title="Reflected XSS", severity="medium", description="d",
+                   proof_of_concept="alert fired")
+    assert res.is_error and "false positive" in res.output
+    # a different finding still records
+    ok = tool.run(title="SQL injection", severity="high", description="d",
+                  proof_of_concept="dumped rows")
+    assert ok.data is not None

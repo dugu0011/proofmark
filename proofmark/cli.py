@@ -87,13 +87,16 @@ def main(ctx: click.Context) -> None:
 @click.option("--base-url", default="", help="Base URL to test a spec target against (if the spec omits it).")
 @click.option("--max-steps", default=40, show_default=True, help="Hard cap on agent actions.")
 @click.option("--safe-mode/--no-safe-mode", default=True, show_default=True, help="Block destructive HTTP methods (PUT/PATCH/DELETE) so it is safe against production.")
+@click.option("--auth-header", "auth_headers_raw", multiple=True, help="Header attached to every request so the agent tests as an authenticated user, e.g. 'Authorization: Bearer <token>'. Repeatable.")
+@click.option("--auth-cookie", "auth_cookies_raw", multiple=True, help="Cookie attached to every request, e.g. 'session=abc'. Repeatable.")
+@click.option("--suppress", "suppress_titles", multiple=True, help="A finding title to treat as a known false positive and never report. Repeatable.")
 @click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, time_budget, output, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, suppress_titles, time_budget, output, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
@@ -101,6 +104,25 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
         operator=operator, allow_hosts=list(allow_hosts), max_steps=max_steps,
         safe_mode=safe_mode, time_budget_seconds=time_budget, output_path=output,
     )
+
+    import os as _os2, json as _json2
+    auth_headers = {}
+    _eh = _os2.environ.get("PROOFMARK_AUTH_HEADERS")
+    if _eh:
+        try: auth_headers.update(_json2.loads(_eh))
+        except ValueError: pass
+    for _it in auth_headers_raw:
+        _k, _v = _split_kv(_it, prefer_colon=True)
+        if _k: auth_headers[_k] = _v
+    auth_cookies = {}
+    _ec = _os2.environ.get("PROOFMARK_AUTH_COOKIES")
+    if _ec:
+        try: auth_cookies.update(_json2.loads(_ec))
+        except ValueError: pass
+    for _it in auth_cookies_raw:
+        _k, _v = _split_kv(_it, prefer_colon=False)
+        if _k: auth_cookies[_k] = _v
+    suppress_set = {t.strip().lower() for t in suppress_titles if t.strip()}
 
     if not authorized:
         _fail("Refused. This tool actively exploits its target, so it will not run without "
@@ -189,23 +211,25 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
-                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies)
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
                     RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client),
-                    ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(req_log, require_replay=not is_code),
+                    ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
                 ]
                 suffix = code_mode_note()
             else:
-                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies)
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), RunCommandTool(sandbox),
-                    browser, RecordFindingTool(req_log, require_replay=not is_code),
+                    browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
                 ]
                 suffix = spec_briefing
 
+            if auth_headers or auth_cookies:
+                suffix = (suffix + "\n\n" + AUTH_NOTE).strip()
             llm = LLM(model, api_base=api_base)
             run_target = source.label if source else target
             started_at = datetime.now(timezone.utc).isoformat()
@@ -469,6 +493,26 @@ def doctor():
         click.echo(f"{C['dim']}○ browser sandbox not built (optional) — run: proofmark build-sandbox{C['reset']}")
 
     sys.exit(0 if ok else 1)
+
+
+AUTH_NOTE = (
+    "AUTHENTICATED SESSION: credentials are attached to every request, so you are "
+    "acting as a logged-in user. Prioritize authorization flaws — broken access "
+    "control, IDOR, privilege escalation, tenant isolation. You can drop or swap the "
+    "credential on a request to compare authenticated vs unauthenticated responses, "
+    "which is how you prove an access-control bug."
+)
+
+
+def _split_kv(item: str, *, prefer_colon: bool) -> tuple[str, str]:
+    """Parse 'Key: Value' or 'Key=Value' (or 'name=value' for cookies)."""
+    text = str(item)
+    seps = (":", "=") if prefer_colon else ("=", ":")
+    for sep in seps:
+        if sep in text:
+            k, v = text.split(sep, 1)
+            return k.strip(), v.strip()
+    return text.strip(), ""
 
 
 def _aggregate_usage(llms) -> dict:
