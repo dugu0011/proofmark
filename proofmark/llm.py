@@ -30,6 +30,21 @@ class LLM:
         self.api_base = api_base
         self.temperature = temperature
         self.max_tokens = max_tokens
+        # Running totals so a run can report what it cost — tokens are exact, the
+        # dollar figure is litellm's best estimate from its pricing table.
+        self.calls = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.cost_usd = 0.0
+
+    def usage(self) -> dict:
+        return {
+            "model": self.model, "calls": self.calls,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.prompt_tokens + self.completion_tokens,
+            "cost_usd": round(self.cost_usd, 6),
+        }
 
     def complete(self, messages: list[dict], tools: list[dict]) -> Completion:
         import litellm  # heavy import, kept lazy
@@ -48,6 +63,16 @@ class LLM:
             response = litellm.completion(**kwargs)
         except Exception as exc:  # noqa: BLE001 - provider errors are varied
             raise LLMError(f"{type(exc).__name__}: {exc}") from exc
+
+        self.calls += 1
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.prompt_tokens += int(getattr(usage, "prompt_tokens", 0) or 0)
+            self.completion_tokens += int(getattr(usage, "completion_tokens", 0) or 0)
+        try:
+            self.cost_usd += float(litellm.completion_cost(completion_response=response) or 0.0)
+        except Exception:  # noqa: BLE001 - pricing is best-effort, never fatal
+            pass
 
         message = response.choices[0].message
         calls = []

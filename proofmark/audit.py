@@ -100,6 +100,7 @@ class RunRecord:
     requests: list[dict] = field(default_factory=list)   # {method, url, status, error}
     findings: list[dict] = field(default_factory=list)
     fixes: list[dict] = field(default_factory=list)      # {file, diff, explanation}
+    usage: dict = field(default_factory=dict)            # tokens + estimated cost
 
     def chained_steps(self) -> list[dict]:
         """Steps with a hash chain over them."""
@@ -121,7 +122,7 @@ class RunRecord:
             "started_at": self.started_at, "finished_at": self.finished_at,
             "stopped_reason": self.stopped_reason,
             "steps": steps, "requests": self.requests, "findings": self.findings,
-            "fixes": self.fixes,
+            "fixes": self.fixes, "usage": self.usage,
             "chain_tip": steps[-1]["hash"] if steps else GENESIS,
         }
         priv = _load_ed25519_private()

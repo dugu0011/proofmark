@@ -213,3 +213,34 @@ def test_a_pinned_public_key_rejects_a_different_signer(tmp_path, monkeypatch):
     monkeypatch.setenv(audit.SIGNING_PUBLIC_ENV, "ed25519:" + other_pub)
     ok, reason = audit.verify(str(tmp_path / "test-run"))
     assert not ok and "unexpected key" in reason
+
+
+# ------------------------------------------------ cost/usage accounting
+
+
+def test_llm_usage_accumulates_and_aggregates():
+    from proofmark.llm import LLM
+    from proofmark.cli import _aggregate_usage
+
+    a = LLM("anthropic/claude-x")
+    a.calls, a.prompt_tokens, a.completion_tokens, a.cost_usd = 2, 100, 50, 0.01
+    b = LLM("openai/gpt-x")
+    b.calls, b.prompt_tokens, b.completion_tokens, b.cost_usd = 1, 200, 80, 0.02
+
+    assert a.usage()["total_tokens"] == 150
+    agg = _aggregate_usage([a, b])
+    assert agg["total_tokens"] == 430 and agg["calls"] == 3
+    assert round(agg["cost_usd"], 4) == 0.03
+    assert set(agg["by_model"]) == {"anthropic/claude-x", "openai/gpt-x"}
+
+
+def test_run_record_carries_usage_in_the_signed_body():
+    from proofmark import audit
+    rec = audit.RunRecord(
+        run_id="u1", product="Proofmark", version="0.4.0", target="https://x",
+        kind="url", operator="me", model="m", authorization={},
+        started_at="s", finished_at="f", stopped_reason="done",
+        usage={"total_tokens": 1234, "cost_usd": 0.05},
+    )
+    body = rec.manifest()
+    assert body["usage"]["total_tokens"] == 1234 and body["usage"]["cost_usd"] == 0.05

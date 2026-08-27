@@ -248,6 +248,11 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 )
                 outcome = agent.run(run_target, cfg.kind)
             finished_at = datetime.now(timezone.utc).isoformat()
+            # What the run cost: sum the usage of every model it actually invoked.
+            _llms = {id(llm): llm}
+            for _l in (recon_llm, exploit_llm):
+                _llms[id(_l)] = _l
+            run_usage = _aggregate_usage(list(_llms.values()))
             browser.close()
     except SandboxError as exc:
         _fail(f"Sandbox error: {exc}")
@@ -263,6 +268,10 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
     n = len(outcome.findings)
     colour = C["yellow"] if n else C["green"]
     click.echo(f"{colour}{C['b']}{n} proven finding(s){C['reset']} in {outcome.steps_used} step(s).")
+    if run_usage.get("total_tokens"):
+        _cost = run_usage.get("cost_usd") or 0.0
+        click.echo(f"{C['dim']}{run_usage['total_tokens']:,} tokens"
+                   f"{f' · ~${_cost:.4f}' if _cost else ''}{C['reset']}")
     # The tamper-evident run record — always written. This is the point of
     # difference: a signed, replayable transcript of exactly what happened.
     record = audit.RunRecord(
@@ -277,6 +286,7 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
         } for f in outcome.findings],
     )
     record.fixes = fix_log.fixes
+    record.usage = run_usage
     out_dir = audit.save(record, run_dir)
     for i, fx in enumerate(fix_log.fixes, 1):
         (out_dir / f"fix-{i}.patch").write_text(fx["diff"] + "\n", encoding="utf-8")
@@ -459,6 +469,28 @@ def doctor():
         click.echo(f"{C['dim']}○ browser sandbox not built (optional) — run: proofmark build-sandbox{C['reset']}")
 
     sys.exit(0 if ok else 1)
+
+
+def _aggregate_usage(llms) -> dict:
+    """Sum token usage and estimated cost across the models a run used."""
+    total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+             "cost_usd": 0.0, "calls": 0, "by_model": {}}
+    for llm in llms:
+        u = llm.usage()
+        total["prompt_tokens"] += u["prompt_tokens"]
+        total["completion_tokens"] += u["completion_tokens"]
+        total["total_tokens"] += u["total_tokens"]
+        total["cost_usd"] += u["cost_usd"]
+        total["calls"] += u["calls"]
+        if u["calls"]:
+            # a run may use one model for two phases — merge, do not overwrite
+            m = total["by_model"].setdefault(
+                u["model"], {"calls": 0, "total_tokens": 0, "cost_usd": 0.0})
+            m["calls"] += u["calls"]
+            m["total_tokens"] += u["total_tokens"]
+            m["cost_usd"] = round(m["cost_usd"] + u["cost_usd"], 6)
+    total["cost_usd"] = round(total["cost_usd"], 6)
+    return total
 
 
 def _fail(message: str) -> None:
