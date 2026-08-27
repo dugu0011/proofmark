@@ -16,7 +16,7 @@
 </p>
 
 <p>
-  <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#setup--your-first-scan"><b>Setup</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#trust--safety"><b>Trust &amp; safety</b></a> &nbsp;·&nbsp;
   <a href="#usage"><b>Usage</b></a> &nbsp;·&nbsp;
@@ -79,32 +79,79 @@ built to be the most *trustworthy* one:
 | Run record | logs, at best | **hash-chained, optionally signed, replayable** |
 | "Does the exploit still work?" | re-run and hope | **`proofmark replay`** |
 
-## Quick start
+## Setup & your first scan
 
-**Prerequisites:** Docker running, and an LLM API key from any supported provider.
+Proofmark runs in about a minute. Follow the steps in order.
+
+### 1. Prerequisites
+
+You need three things:
+
+| Requirement | Why | Check |
+|---|---|---|
+| **Python 3.10+** | Proofmark is a Python CLI | `python3 --version` |
+| **Docker, running** | every target is tested inside an isolated sandbox | `docker ps` |
+| **An LLM API key** | the agent's brain — OpenAI, Anthropic, or Azure | see step 3 |
+
+### 2. Install
 
 ```bash
-# Install
 pip install git+https://github.com/dugu0011/proofmark.git
+```
 
-# Check your environment
+Then confirm your machine is ready — this checks Docker, your API key, and the engine:
+
+```bash
 proofmark doctor
+```
 
-# Configure your provider (LiteLLM reads the key from the environment)
-export ANTHROPIC_API_KEY="your-api-key"     # or OPENAI_API_KEY / AZURE_API_KEY
+### 3. Add your LLM API key
 
-# Run your first assessment
+Proofmark reads the key from your environment. Set **one** for the provider you use:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."     # for  --model anthropic/claude-...
+# or
+export OPENAI_API_KEY="sk-..."            # for  --model openai/gpt-...
+# or
+export AZURE_API_KEY="..."                # for  --model azure/<deployment>  (also pass --api-base)
+```
+
+### 4. (Optional) Build the browser sandbox
+
+Only needed to test **single-page apps** (React/Angular/Vue) or **client-side bugs (XSS)** —
+it adds a real headless Chromium. Build it once; skip it for plain API/URL testing.
+
+```bash
+proofmark build-sandbox
+```
+
+### 5. Run your first scan
+
+> ⚠️ Only scan targets you own or have written permission to test. `--authorized` is your
+> assertion that you do — it is recorded in every run.
+
+```bash
 proofmark scan -t https://staging.my-app.test --authorized --operator you@team.com
 ```
 
-The first run pulls the sandbox image. Every run writes a tamper-evident record
-to `proofmark_runs/<id>/`.
+What the flags mean:
 
-> **Testing a single-page app (React/Angular/Vue) or client-side bugs (XSS)?**
-> Build the browser sandbox once — it adds a real headless Chromium:
-> ```bash
-> proofmark build-sandbox
-> ```
+- `-t` — the target (a URL, a local path, a git repo, or an OpenAPI/Postman file)
+- `--authorized` — required; asserts you have permission (recorded in the run)
+- `--operator` — who ran it (recorded in the report)
+- add `--model anthropic/claude-opus-4-1` to pick a specific model, or `--strategy graph` for the recon → exploit multi-agent flow
+
+### 6. Read the results
+
+The scan prints proven findings and their proof-of-concept, and writes a tamper-evident
+record to `proofmark_runs/<id>/` (a Markdown report plus a signed, replayable `run.json`).
+Exit code is non-zero when anything is proven — handy for CI.
+
+```bash
+proofmark verify proofmark_runs/<id>    # is this record intact?
+proofmark replay proofmark_runs/<id>    # does the exploit still work?
+```
 
 ## Every run is signed, verifiable, and replayable
 
