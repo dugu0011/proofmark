@@ -100,6 +100,12 @@ proofmark scan -t https://staging.my-app.test --authorized --operator you@team.c
 The first run pulls the sandbox image. Every run writes a tamper-evident record
 to `proofmark_runs/<id>/`.
 
+> **Testing a single-page app (React/Angular/Vue) or client-side bugs (XSS)?**
+> Build the browser sandbox once — it adds a real headless Chromium:
+> ```bash
+> proofmark build-sandbox
+> ```
+
 ## Every run is signed, verifiable, and replayable
 
 This is Proofmark's core difference. Each scan writes a **tamper-evident record**
