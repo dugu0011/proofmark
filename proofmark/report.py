@@ -67,7 +67,17 @@ def _finding_block(i: int, f: Finding) -> list[str]:
         out.append(f"**OWASP:** {f.owasp_category}  ")
     if f.cwe:
         out.append(f"**CWE:** {f.cwe}  ")
-    out += ["", f.description, "", "**Proof of concept:**", "", "```", f.proof_of_concept.strip(), "```", ""]
+    # record_finding appends captured reproduction to the PoC for downstream
+    # readers; in this report it gets its own Evidence section, so keep PoC prose.
+    poc = f.proof_of_concept.split("--- captured reproduction ---", 1)[0].strip()
+    out += ["", f.description, "", "**Proof of concept:**", "", "```", poc, "```", ""]
+    for j, ev in enumerate(getattr(f, "evidence", None) or [], 1):
+        out += [
+            f"**Evidence {j} — {ev.get('method', '')} {ev.get('url', '')} → HTTP {ev.get('status')}**",
+            "", "```bash", ev.get("curl", "").strip(), "```",
+        ]
+        if ev.get("response_preview"):
+            out += ["Response:", "", "```", ev["response_preview"].strip(), "```", ""]
     if f.remediation:
         out += ["**Remediation:**", "", f.remediation, ""]
     out.append("---")

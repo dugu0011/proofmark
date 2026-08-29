@@ -338,7 +338,9 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
         findings=[{
             "title": f.title, "severity": f.severity.value, "location": f.location,
             "description": f.description, "proof_of_concept": f.proof_of_concept,
-            "remediation": f.remediation,
+            "remediation": f.remediation, "confidence": f.confidence,
+            "owasp_category": f.owasp_category, "cwe": f.cwe,
+            "evidence": f.evidence,
         } for f in outcome.findings],
     )
     record.fixes = fix_log.fixes
