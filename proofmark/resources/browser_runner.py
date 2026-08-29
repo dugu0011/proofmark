@@ -60,6 +60,15 @@ def main() -> None:
                 "dialogs": dialogs,          # non-empty == script executed
                 "console": console[-15:],
             }
+            # A screenshot of the page state is visual proof — a fired dialog, a
+            # reflected payload rendered, the authenticated view. Best-effort: a
+            # capture failure must not lose the rest of the result.
+            try:
+                import base64
+                shot = page.screenshot(type="png", full_page=False)
+                result["screenshot"] = base64.b64encode(shot).decode()
+            except Exception:  # noqa: BLE001
+                pass
             browser.close()
             print(json.dumps(result))
     except Exception as exc:  # noqa: BLE001

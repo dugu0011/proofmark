@@ -238,7 +238,7 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
     try:
         with Sandbox() as sandbox:
             req_log = RequestLog()
-            browser = BrowserTool(auth)
+            browser = BrowserTool(auth, artifacts_dir=run_dir)
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)

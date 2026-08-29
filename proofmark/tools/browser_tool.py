@@ -8,6 +8,8 @@ Scope is enforced here before the browser navigates anywhere.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 from pathlib import Path
 
@@ -40,11 +42,34 @@ class BrowserTool(Tool):
         "required": ["url"],
     }
 
-    def __init__(self, authorization: Authorization) -> None:
+    def __init__(self, authorization: Authorization, artifacts_dir: str | None = None) -> None:
         self._auth = authorization
         self._sb: Sandbox | None = None
         self._runner_path: str | None = None
         self._unavailable: str | None = None
+        # Where page screenshots are written (the run directory), so they persist
+        # next to the signed run record as visual evidence. None = don't save.
+        self._artifacts_dir = artifacts_dir
+        self.captures: list[dict] = []   # [{"file","url","title"}] for the report
+        from uuid import uuid4
+        self._token = uuid4().hex[:6]    # keeps filenames unique across runs
+
+    def _save_screenshot(self, b64: str, url: str, title: str) -> str | None:
+        if not (b64 and self._artifacts_dir):
+            return None
+        try:
+            data = base64.b64decode(b64)
+        except (binascii.Error, ValueError):
+            return None
+        name = f"screenshot-{self._token}-{len(self.captures) + 1}.png"
+        try:
+            path = Path(self._artifacts_dir)
+            path.mkdir(parents=True, exist_ok=True)
+            (path / name).write_bytes(data)
+        except OSError:
+            return None
+        self.captures.append({"file": name, "url": url, "title": title})
+        return name
 
     def _ensure(self) -> bool:
         if self._sb is not None:
@@ -90,6 +115,13 @@ class BrowserTool(Tool):
         if dialogs:
             proof = ("\n*** DIALOG FIRED — injected script executed: "
                      + "; ".join(f"{d['type']}({d['message']!r})" for d in dialogs) + " ***")
+
+        shot = self._save_screenshot(
+            data.pop("screenshot", ""), data.get("final_url", ""), data.get("title", ""))
+        if shot:
+            proof += (f"\nscreenshot saved: {shot} — visual evidence of this page state; "
+                      "cite it in the finding.")
+
         return ToolResult(
             f"final_url: {data.get('final_url')}\ntitle: {data.get('title')}\n"
             f"console: {data.get('console')}\ntext[:800]:\n{(data.get('text') or '')[:800]}{proof}")
