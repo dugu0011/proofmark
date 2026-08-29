@@ -1,0 +1,5 @@
+{
+  "target": "OWASP Juice Shop",
+  "note": "Known vulnerability classes Juice Shop deliberately contains. Recall over these tells you whether a run found the bug classes it should. Extend as you validate more.",
+  "owasp_categories": ["A01", "A02", "A03", "A05", "A06", "A07"]
+}
