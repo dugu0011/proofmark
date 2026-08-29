@@ -26,6 +26,7 @@ from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
     ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool, AuthzProbeTool,
+    MassAssignmentTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -253,10 +254,11 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
-                    ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client), RunCommandTool(sandbox),
+                    ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
+                    MassAssignmentTool(client), RunCommandTool(sandbox),
                     browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
                 ]
-                suffix = spec_briefing
+                suffix = (spec_briefing + "\n\n" + API_PLAYBOOK).strip() if spec_briefing else API_PLAYBOOK
 
             if auth_headers or auth_cookies:
                 suffix = (suffix + "\n\n" + AUTH_NOTE).strip()
@@ -535,6 +537,24 @@ AUTH_NOTE = (
     "control, IDOR, privilege escalation, tenant isolation. You can drop or swap the "
     "credential on a request to compare authenticated vs unauthenticated responses, "
     "which is how you prove an access-control bug."
+)
+
+API_PLAYBOOK = (
+    "API TARGET — work the OWASP API Top 10 methodically, proving each with a request:\n"
+    "- Broken object-level auth (BOLA/IDOR): for any /resource/{id} or ?id=, use "
+    "authz_probe to replay it as another identity and compare.\n"
+    "- Broken function-level auth (BFLA): try admin/privileged endpoints and methods "
+    "(DELETE, PUT, /admin/*) as a normal user; authz_probe confirms who is allowed.\n"
+    "- Mass assignment: on a create/update, use mass_assignment_probe to add fields the "
+    "client shouldn't set (role, is_admin, verified) and see if they bind.\n"
+    "- Excessive data exposure: read list/detail responses carefully — do they return "
+    "fields the client never needs (password hashes, tokens, other users' PII, internal "
+    "flags)? The server should filter, not the UI.\n"
+    "- Injection: where input reaches a query/command, replay_request with a payload and "
+    "compare (an error, a boolean/time difference, extra rows) — never assume, prove it.\n"
+    "- Broken authentication & rate limiting: weak/absent auth on sensitive routes, no "
+    "throttling on login/OTP. Prove with repeated requests.\n"
+    "Record a finding only with a concrete request/response, and pass evidence_requests."
 )
 
 SECOND_IDENTITY_NOTE = (
