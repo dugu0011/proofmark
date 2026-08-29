@@ -8,8 +8,23 @@ The agent is instructed never to record one without that.
 from __future__ import annotations
 
 import enum
+import shlex
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+
+def render_curl(method: str, url: str, headers: dict | None = None, body: str | None = None) -> str:
+    """A copy-pasteable curl for one request — the reproducible half of a proof.
+
+    Built from what the agent actually sent at the tool level; the run's session
+    credentials are attached by the client at send time and are deliberately not
+    inlined here, so the reproduction never carries a live token."""
+    parts = [f"curl -i -X {method.upper()} {shlex.quote(url)}"]
+    for key, value in (headers or {}).items():
+        parts.append(f"-H {shlex.quote(f'{key}: {value}')}")
+    if body:
+        parts.append(f"--data {shlex.quote(body)}")
+    return " \\\n  ".join(parts)
 
 
 class Severity(str, enum.Enum):
@@ -41,6 +56,10 @@ class Finding:
     # How sure the agent is it reproduced a *real* exploit. Honesty here is what
     # keeps the report trustworthy — a low-confidence finding is flagged as such.
     confidence: str = "medium"  # high | medium | low
+    # Structured proof: the exact request/response exchanges that reproduced the
+    # bug, each with a curl. Populated by record_finding from the request log, so
+    # the evidence is captured verbatim rather than paraphrased by the model.
+    evidence: list = field(default_factory=list)
     found_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def fingerprint(self) -> str:

@@ -81,7 +81,8 @@ class HttpClient:
 
     def __init__(self, sandbox: Sandbox, authorization: Authorization, log: RequestLog,
                  *, safe_mode: bool = True, auth_headers: dict | None = None,
-                 auth_cookies: dict | None = None) -> None:
+                 auth_cookies: dict | None = None,
+                 identities: dict[str, dict] | None = None) -> None:
         self._sb = sandbox
         self._auth = authorization
         self.log = log
@@ -90,26 +91,61 @@ class HttpClient:
         # an authenticated user — where the interesting authorization bugs live.
         self._auth_headers = dict(auth_headers or {})
         self._auth_cookies = dict(auth_cookies or {})
+        # Extra named identities (a second, lower-privileged user; an admin) the
+        # agent can *replay a request as* to test access control — the primitive
+        # behind BOLA/IDOR and BFLA. Each is {"headers": {...}, "cookies": {...},
+        # optional "label"}. "anonymous" (no credentials) is always available.
+        self._identities = {k: dict(v) for k, v in (identities or {}).items()}
         # In-run cache of idempotent responses, so re-fetching the same page does
         # not cost another sandbox round-trip or another wall of tokens.
         self._cache: dict[str, tuple] = {}
 
-    def _apply_auth(self, headers: dict | None) -> dict:
-        """Merge in the run's credentials. The agent's own headers win, so it can
-        deliberately drop or swap a token to test access control."""
-        merged = {**self._auth_headers, **(headers or {})}
-        if self._auth_cookies and not any(k.lower() == "cookie" for k in merged):
-            merged["Cookie"] = "; ".join(f"{k}={v}" for k, v in self._auth_cookies.items())
+    def _creds_for(self, identity: str | None) -> tuple[dict, dict]:
+        """(headers, cookies) for a named identity. None/'primary' = the run's own."""
+        if identity in (None, "primary"):
+            return self._auth_headers, self._auth_cookies
+        if identity == "anonymous":
+            return {}, {}
+        ident = self._identities.get(identity)
+        if ident is None:
+            return self._auth_headers, self._auth_cookies  # unknown → primary
+        return ident.get("headers") or {}, ident.get("cookies") or {}
+
+    def _apply_auth(self, headers: dict | None, identity: str | None = None) -> dict:
+        """Merge in an identity's credentials. The agent's own headers win, so it
+        can deliberately drop or swap a token to test access control."""
+        creds_headers, creds_cookies = self._creds_for(identity)
+        merged = {**creds_headers, **(headers or {})}
+        if creds_cookies and not any(k.lower() == "cookie" for k in merged):
+            merged["Cookie"] = "; ".join(f"{k}={v}" for k, v in creds_cookies.items())
         return merged
 
     @property
     def authenticated(self) -> bool:
         return bool(self._auth_headers or self._auth_cookies)
 
+    def alternate_identities(self) -> list[str]:
+        """Identities the agent can replay a request as, to compare access.
+
+        Always includes 'anonymous'; plus any configured second user / admin.
+        These are what authz_probe compares against the primary identity.
+        """
+        names = list(self._identities.keys())
+        if "anonymous" not in names:
+            names.append("anonymous")
+        return names
+
+    def identity_label(self, identity: str | None) -> str:
+        if identity in (None, "primary"):
+            return "primary"
+        if identity == "anonymous":
+            return "anonymous (no credentials)"
+        return (self._identities.get(identity) or {}).get("label") or identity
+
     @staticmethod
-    def _cache_key(request: "Request") -> str:
+    def _cache_key(request: "Request", identity: str | None = None) -> str:
         h = json.dumps(request.headers or {}, sort_keys=True)
-        return f"{request.method.upper()}\n{request.url}\n{h}\n{request.body or ''}"
+        return f"{identity or 'primary'}\n{request.method.upper()}\n{request.url}\n{h}\n{request.body or ''}"
 
     def raw(self, request: Request) -> dict | None:
         """Scope-checked, sandboxed fetch that returns the FULL parsed response.
@@ -136,8 +172,13 @@ class HttpClient:
         self.log.add(request, data.get("status"), (data.get("body") or "")[:1200])
         return data
 
-    def send(self, request: Request) -> tuple[bool, str, Exchange]:
-        """Returns (ok, text_for_the_agent, logged_exchange)."""
+    def send(self, request: Request, *, identity: str | None = None) -> tuple[bool, str, Exchange]:
+        """Returns (ok, text_for_the_agent, logged_exchange).
+
+        ``identity`` selects whose credentials to attach: None/'primary' the run's
+        own, 'anonymous' none, or a configured second user / admin. That is how
+        authz_probe re-sends one request as another principal to test access.
+        """
         if not self._auth.permits_host(request.url):
             scope = ", ".join(sorted(self._auth.allowed_hosts)) or "no live host"
             msg = (f"Refused: {request.url} is outside the authorized scope ({scope}). "
@@ -154,7 +195,7 @@ class HttpClient:
             ex = self.log.add(request, None, "", error="blocked by safe mode")
             return False, msg, ex
 
-        key = self._cache_key(request) if request.method.upper() in ("GET", "HEAD") else None
+        key = self._cache_key(request, identity) if request.method.upper() in ("GET", "HEAD") else None
         if key is not None and key in self._cache:
             status, preview, first_idx = self._cache[key]
             ex = self.log.add(request, status, preview)
@@ -165,7 +206,7 @@ class HttpClient:
 
         spec = json.dumps({
             "method": request.method, "url": request.url,
-            "headers": self._apply_auth(request.headers), "body": request.body, "timeout": 20,
+            "headers": self._apply_auth(request.headers, identity), "body": request.body, "timeout": 20,
         })
         code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
         out = out.strip()
