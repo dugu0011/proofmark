@@ -25,7 +25,7 @@ from proofmark.sandbox import Sandbox, SandboxError
 from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
-    ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool,
+    ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool, AuthzProbeTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -89,6 +89,9 @@ def main(ctx: click.Context) -> None:
 @click.option("--safe-mode/--no-safe-mode", default=True, show_default=True, help="Block destructive HTTP methods (PUT/PATCH/DELETE) so it is safe against production.")
 @click.option("--auth-header", "auth_headers_raw", multiple=True, help="Header attached to every request so the agent tests as an authenticated user, e.g. 'Authorization: Bearer <token>'. Repeatable.")
 @click.option("--auth-cookie", "auth_cookies_raw", multiple=True, help="Cookie attached to every request, e.g. 'session=abc'. Repeatable.")
+@click.option("--second-auth-header", "second_headers_raw", multiple=True, help="Header for a SECOND identity (a different user/role) the agent can replay a request as, to test broken access control (BOLA/BFLA). Repeatable.")
+@click.option("--second-auth-cookie", "second_cookies_raw", multiple=True, help="Cookie for the second identity. Repeatable.")
+@click.option("--second-identity-label", default="second user", show_default=True, help="How the second identity is named in the report.")
 @click.option("--suppress", "suppress_titles", multiple=True, help="A finding title to treat as a known false positive and never report. Repeatable.")
 @click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
@@ -96,7 +99,7 @@ def main(ctx: click.Context) -> None:
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, suppress_titles, time_budget, output, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, suppress_titles, time_budget, output, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
@@ -122,6 +125,33 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
     for _it in auth_cookies_raw:
         _k, _v = _split_kv(_it, prefer_colon=False)
         if _k: auth_cookies[_k] = _v
+
+    # A second identity (a different user/role) enables broken-access-control
+    # testing: the agent replays a request as this principal and compares. Read
+    # from flags or PROOFMARK_SECOND_AUTH_HEADERS/COOKIES (JSON) so the platform
+    # can pass a second set of credentials without exposing them on argv.
+    second_headers, second_cookies = {}, {}
+    _sh = _os2.environ.get("PROOFMARK_SECOND_AUTH_HEADERS")
+    if _sh:
+        try: second_headers.update(_json2.loads(_sh))
+        except ValueError: pass
+    for _it in second_headers_raw:
+        _k, _v = _split_kv(_it, prefer_colon=True)
+        if _k: second_headers[_k] = _v
+    _sc = _os2.environ.get("PROOFMARK_SECOND_AUTH_COOKIES")
+    if _sc:
+        try: second_cookies.update(_json2.loads(_sc))
+        except ValueError: pass
+    for _it in second_cookies_raw:
+        _k, _v = _split_kv(_it, prefer_colon=False)
+        if _k: second_cookies[_k] = _v
+    identities: dict[str, dict] = {}
+    if second_headers or second_cookies:
+        identities["second_user"] = {
+            "headers": second_headers, "cookies": second_cookies,
+            "label": second_identity_label,
+        }
+
     suppress_set = {t.strip().lower() for t in suppress_titles if t.strip()}
 
     if not authorized:
@@ -211,25 +241,27 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
-                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
                     RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
-                    ListRequestsTool(client), ReplayRequestTool(client),
+                    ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
                     ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
                 ]
                 suffix = code_mode_note()
             else:
-                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
-                    ListRequestsTool(client), ReplayRequestTool(client), RunCommandTool(sandbox),
+                    ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client), RunCommandTool(sandbox),
                     browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
                 ]
                 suffix = spec_briefing
 
             if auth_headers or auth_cookies:
                 suffix = (suffix + "\n\n" + AUTH_NOTE).strip()
+            if identities:
+                suffix = (suffix + "\n\n" + SECOND_IDENTITY_NOTE).strip()
             llm = LLM(model, api_base=api_base)
             run_target = source.label if source else target
             started_at = datetime.now(timezone.utc).isoformat()
@@ -501,6 +533,17 @@ AUTH_NOTE = (
     "control, IDOR, privilege escalation, tenant isolation. You can drop or swap the "
     "credential on a request to compare authenticated vs unauthenticated responses, "
     "which is how you prove an access-control bug."
+)
+
+SECOND_IDENTITY_NOTE = (
+    "A SECOND identity is configured. Whenever you hit an endpoint that reads an "
+    "object by id (/orders/123, ?user_id=…) or performs a privileged/admin action, "
+    "send it once as yourself, then run authz_probe with that request number: it "
+    "replays the request as the second user and as anonymous and compares. If a "
+    "lower-privileged identity gets the same successful response, you have found "
+    "Broken Access Control — BOLA/IDOR for an object, BFLA for a function. Confirm "
+    "the returned data belongs to the other user, then record_finding citing the "
+    "request numbers as proof."
 )
 
 

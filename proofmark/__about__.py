@@ -7,5 +7,5 @@ header read from these three names, so changing them is the whole rebrand.
 NAME = "Proofmark"
 # The CLI command and the importable package. Keep it lowercase, no spaces.
 SLUG = "proofmark"
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 TAGLINE = "An AI agent that finds and proves real vulnerabilities in code you own."
