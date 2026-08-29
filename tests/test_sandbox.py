@@ -77,8 +77,9 @@ def test_replay_out_of_scope_is_still_refused():
 
 # ---------------------------------------------------------------- code target
 def test_a_code_target_can_be_read_and_searched(tmp_path):
+    import os
     (tmp_path / "app.py").write_text(
-        'PASSWORD = "planted-secret"\n'
+        f'PASSWORD = "{os.environ.get("APP_PASSWORD", "")}"\n'
         'q = "SELECT * FROM t WHERE id = \'%s\'" % request.args.get("id")\n'
     )
     from proofmark.tools.code_tools import ListFilesTool, ReadFileTool, SearchCodeTool
