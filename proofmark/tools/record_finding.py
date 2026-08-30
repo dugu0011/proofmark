@@ -53,6 +53,9 @@ class RecordFindingTool(Tool):
                  suppress_titles: set | None = None) -> None:
         # Track what has been recorded so the same bug is never reported twice.
         self._seen: set[str] = set()
+        # Compact list of what has been proven, so the agent can recall it (via
+        # list_findings) and chain findings into higher-impact attacks.
+        self.recorded: list[dict] = []
         # For live targets, "high" confidence is earned, not asserted: it requires
         # the exploit to have been reproduced a second time via replay_request.
         self._log = log
@@ -128,6 +131,8 @@ class RecordFindingTool(Tool):
             )
         self._seen.add(fp)
         self._attach_evidence(finding, kwargs.get("evidence_requests"))
+        self.recorded.append({"title": finding.title, "severity": finding.severity.value,
+                              "location": finding.location})
         note = ""
         if downgraded:
             note = (" Confidence lowered to medium: I have no record of this exploit "

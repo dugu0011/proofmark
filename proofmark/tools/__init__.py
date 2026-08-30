@@ -10,6 +10,7 @@ from proofmark.tools.note_tool import NoteTool
 from proofmark.tools.subdomains_tool import SubdomainTool
 from proofmark.tools.authz_tool import AuthzProbeTool
 from proofmark.tools.mass_assignment_tool import MassAssignmentTool
+from proofmark.tools.list_findings_tool import ListFindingsTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -17,5 +18,5 @@ __all__ = [
     "RunCommandTool", "RecordFindingTool",
     "ListFilesTool", "ReadFileTool", "SearchCodeTool", "ReconTool",
     "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool", "SubdomainTool",
-    "AuthzProbeTool", "MassAssignmentTool",
+    "AuthzProbeTool", "MassAssignmentTool", "ListFindingsTool",
 ]

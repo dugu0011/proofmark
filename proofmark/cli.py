@@ -26,7 +26,7 @@ from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
     ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool, AuthzProbeTool,
-    MassAssignmentTool,
+    MassAssignmentTool, ListFindingsTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -243,23 +243,26 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
                 client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
+                record_tool = RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set)
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
                     RunCommandTool(sandbox), ReconTool(client), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
-                    ProposeFixTool(sandbox, fix_log), browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
+                    ProposeFixTool(sandbox, fix_log), browser, record_tool, ListFindingsTool(record_tool),
                 ]
                 suffix = code_mode_note()
             else:
                 client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
+                record_tool = RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set)
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
                     MassAssignmentTool(client), RunCommandTool(sandbox),
-                    browser, RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set),
+                    browser, record_tool, ListFindingsTool(record_tool),
                 ]
                 suffix = (spec_briefing + "\n\n" + API_PLAYBOOK).strip() if spec_briefing else API_PLAYBOOK
 
+            suffix = (suffix + "\n\n" + CHAIN_PLAYBOOK).strip()
             if auth_headers or auth_cookies:
                 suffix = (suffix + "\n\n" + AUTH_NOTE).strip()
             if identities:
@@ -555,6 +558,17 @@ API_PLAYBOOK = (
     "- Broken authentication & rate limiting: weak/absent auth on sensitive routes, no "
     "throttling on login/OTP. Prove with repeated requests.\n"
     "Record a finding only with a concrete request/response, and pass evidence_requests."
+)
+
+CHAIN_PLAYBOOK = (
+    "CHAIN FOR IMPACT. A single bug is rarely the whole story — the severe findings "
+    "come from combining them. After you prove something, call list_findings and ask "
+    "what it unlocks: a leaked credential or token reused against another endpoint; "
+    "an IDOR that exposes an admin object; SSRF that reads cloud metadata whose creds "
+    "open the next door; a low-priv account plus a BFLA that reaches admin actions. "
+    "When a chain works, record it as its own finding at the impact of the END state "
+    "(often critical — account takeover, RCE, full data access), with every step and "
+    "its evidence_requests."
 )
 
 SECOND_IDENTITY_NOTE = (
