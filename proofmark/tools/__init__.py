@@ -25,6 +25,8 @@ from proofmark.tools.xss_tool import XssTool
 from proofmark.tools.coverage_tool import CoverageTool
 from proofmark.tools.cors_tool import CorsTool
 from proofmark.tools.csrf_tool import CsrfTool
+from proofmark.tools.nosql_tool import NoSqlInjectionTool
+from proofmark.tools.takeover_tool import SubdomainTakeoverTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -36,5 +38,5 @@ __all__ = [
     "OobCanaryTool", "OobCheckTool", "SqlInjectionTool", "SsrfTool",
     "CommandInjectionTool", "SstiTool", "PathTraversalTool", "OpenRedirectTool",
     "JwtAttackTool", "XxeTool", "GraphQLTool", "XssTool", "CoverageTool",
-    "CorsTool", "CsrfTool",
+    "CorsTool", "CsrfTool", "NoSqlInjectionTool", "SubdomainTakeoverTool",
 ]

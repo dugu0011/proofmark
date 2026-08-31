@@ -29,7 +29,7 @@ from proofmark.tools import (
     MassAssignmentTool, ListFindingsTool, OobCanaryTool, OobCheckTool,
     SqlInjectionTool, SsrfTool, CommandInjectionTool, SstiTool, PathTraversalTool,
     OpenRedirectTool, JwtAttackTool, XxeTool, GraphQLTool, XssTool, CoverageTool,
-    CorsTool, CsrfTool,
+    CorsTool, CsrfTool, NoSqlInjectionTool, SubdomainTakeoverTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -292,6 +292,7 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                     MassAssignmentTool(client), SqlInjectionTool(client),
                     SstiTool(client), PathTraversalTool(client),
                     JwtAttackTool(), GraphQLTool(client), CorsTool(client), CsrfTool(client),
+                    NoSqlInjectionTool(client), SubdomainTakeoverTool(client),
                     CoverageTool(CoverageBoard()),
                     RunCommandTool(sandbox),
                     XssTool(browser),
