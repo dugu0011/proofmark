@@ -13,6 +13,7 @@ from proofmark.tools.mass_assignment_tool import MassAssignmentTool
 from proofmark.tools.list_findings_tool import ListFindingsTool
 from proofmark.tools.oob_tool import OobCanaryTool, OobCheckTool
 from proofmark.tools.sqli_tool import SqlInjectionTool
+from proofmark.tools.ssrf_tool import SsrfTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -21,5 +22,5 @@ __all__ = [
     "ListFilesTool", "ReadFileTool", "SearchCodeTool", "ReconTool",
     "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool", "SubdomainTool",
     "AuthzProbeTool", "MassAssignmentTool", "ListFindingsTool",
-    "OobCanaryTool", "OobCheckTool", "SqlInjectionTool",
+    "OobCanaryTool", "OobCheckTool", "SqlInjectionTool", "SsrfTool",
 ]
