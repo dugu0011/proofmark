@@ -82,120 +82,44 @@ built to be the most *trustworthy* one:
 
 ## Setup & your first scan
 
-Proofmark runs in about a minute. Follow the steps in order.
+**You need:** Python 3.10+ · Docker running · one LLM API key (Anthropic, OpenAI, or Azure).
 
-### 1. Prerequisites
-
-You need three things:
-
-| Requirement | Why | Check |
-|---|---|---|
-| **Python 3.10+** | Proofmark is a Python CLI | `python3 --version` |
-| **Docker, running** | every target is tested inside an isolated sandbox | `docker ps` |
-| **An LLM API key** | the agent's brain — OpenAI, Anthropic, or Azure | see step 3 |
-
-### 2. Install
+**1 · Install**
 
 ```bash
 pip install git+https://github.com/dugu0011/proofmark.git
 ```
 
-Then confirm your machine is ready — this checks Docker, your API key, and the engine:
+**2 · Set your key** — pick your provider. The key you set and the `--model` you scan with must be the same provider:
 
-```bash
-proofmark doctor
-```
-
-### 3. Add your LLM API key
-
-Proofmark reads your key from the environment — there's no config file and no `--key` flag.
-**The key you set and the `--model` you pass must match the same provider.** This is the #1
-setup gotcha, so pick your provider and use its row:
-
-| Provider | Export in your terminal | Scan with |
+| Provider | Set in your terminal | Scan flag |
 |---|---|---|
-| **Anthropic** | `export ANTHROPIC_API_KEY="sk-ant-..."` | *(nothing — `anthropic/claude-sonnet-4-6` is the default)* |
+| **Anthropic** | `export ANTHROPIC_API_KEY="sk-ant-..."` | *(none — it's the default)* |
 | **OpenAI** | `export OPENAI_API_KEY="sk-..."` | `--model openai/gpt-4.1` |
-| **Azure OpenAI** | `export AZURE_API_KEY="..."`<br>`export AZURE_API_BASE="https://<resource>.openai.azure.com/"`<br>`export AZURE_API_VERSION="2024-12-01-preview"` | `--model azure/<your-deployment> --api-base "$AZURE_API_BASE"` |
+| **Azure** | `export AZURE_API_KEY="..."`<br>`export AZURE_API_BASE="https://<resource>.openai.azure.com/"`<br>`export AZURE_API_VERSION="2024-12-01-preview"` | `--model azure/<deployment> --api-base "$AZURE_API_BASE"` |
 
-> **If you set an Azure or OpenAI key but forget the matching `--model`,** Proofmark falls back to
-> its Anthropic default and errors with `needs ANTHROPIC_API_KEY`. Always pass the `--model` for
-> the key you set.
+Check it: `proofmark doctor` — it should print `✓ LLM key present: ...`.
 
-Confirm it's picked up:
-
-```bash
-proofmark doctor
-```
-
-It prints `✓ LLM key present: <YOUR_KEY_NAME>` when your key is set.
-
-### 4. (Optional) Build the browser sandbox
-
-Only needed to test **single-page apps** (React/Angular/Vue) or **client-side bugs (XSS)** —
-it adds a real headless Chromium. Build it once; skip it for plain API/URL testing.
-
-```bash
-proofmark build-sandbox
-```
-
-### 5. Run your first scan
-
-The safest way to try Proofmark is **OWASP Juice Shop** — a deliberately vulnerable app you run
-locally, so testing it is authorized. Start it on port 3001 (3000 is often taken):
+**3 · Scan** — try it on a deliberately vulnerable app you run locally:
 
 ```bash
 docker run -d --name juice -p 3001:3000 bkimminich/juice-shop
+proofmark scan -t http://host.docker.internal:3001 --authorized --operator you --allow-host host.docker.internal
 ```
 
-Give it ~20 seconds to boot — this should print `200`:
+Using **Azure or OpenAI**? Add the `--model ...` from the table above to that scan line.
+(The scan runs inside a sandbox, so target `host.docker.internal`, not `localhost`.)
+
+**4 · Results** — proven findings print live; the full report and a replayable, tamper-evident record land in `proofmark_runs/<id>/`:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3001
-```
-
-Now scan it. The scan runs inside a sandbox container, so it reaches your app at
-**`host.docker.internal`**, not `localhost`. Use the line for your provider:
-
-```bash
-# Anthropic (default model)
-proofmark scan -t http://host.docker.internal:3001 --authorized --operator you@you.com --allow-host host.docker.internal
-
-# Azure OpenAI  (swap <deployment> for your Azure deployment name, e.g. gpt-4.1)
-proofmark scan -t http://host.docker.internal:3001 --authorized --operator you@you.com --allow-host host.docker.internal --model azure/<deployment> --api-base "$AZURE_API_BASE"
-
-# OpenAI
-proofmark scan -t http://host.docker.internal:3001 --authorized --operator you@you.com --allow-host host.docker.internal --model openai/gpt-4.1
-```
-
-> Paste **only the command** (not the `#` comment line) — in zsh a `#` line with a `)` in it is a
-> syntax error. **Linux:** use your host's Docker gateway IP instead of `host.docker.internal`
-> (often `172.17.0.1`), matched by `--allow-host`.
-
-When that works, point Proofmark at **your own** target the same way — a URL, a git repo, a local
-path, or an OpenAPI/Postman file:
-
-```bash
-proofmark scan -t https://staging.my-app.test --authorized --operator you@team.com
-```
-
-> ⚠️ Only scan targets you own or have written permission to test. `--authorized` asserts you do,
-> and it is recorded in every run.
-
-Handy flags: `--model` pick the LLM · `--strategy graph` recon→exploit multi-agent · `--max-steps`
-and `--time-budget` how deep it digs · `--auth-header 'Authorization: Bearer <t>'` test as a
-logged-in user (add `--second-auth-header` for a 2nd user to find broken access control).
-
-### 6. Read the results
-
-The scan prints proven findings and their proof-of-concept, and writes a tamper-evident
-record to `proofmark_runs/<id>/` (a Markdown report plus a signed, replayable `run.json`).
-Exit code is non-zero when anything is proven — handy for CI.
-
-```bash
-proofmark verify proofmark_runs/<id>    # is this record intact?
+proofmark verify proofmark_runs/<id>    # is the record intact?
 proofmark replay proofmark_runs/<id>    # does the exploit still work?
 ```
+
+> ⚠️ Only scan what you own or have written permission to test — `--authorized` records that you do.
+> Then point Proofmark at your own target the same way: a URL, git repo, local path, or OpenAPI/Postman file.
+> Testing a single-page app or XSS? Run `proofmark build-sandbox` once to add the headless browser.
 
 ### Troubleshooting
 
