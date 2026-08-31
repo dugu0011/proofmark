@@ -100,6 +100,8 @@ pip install git+https://github.com/dugu0011/proofmark.git
 
 Check it: `proofmark doctor` — it should print `✓ LLM key present: ...`.
 
+**Set it once and forget it:** add `export PROOFMARK_MODEL="azure/gpt-4.1"` (your provider's model) to your `~/.zshrc` — then it's your default and you never pass `--model` again. Azure also reads `AZURE_API_BASE`/`AZURE_API_VERSION` from the environment, so `--api-base` becomes optional too.
+
 **3 · Scan** — try it on a deliberately vulnerable app you run locally:
 
 ```bash

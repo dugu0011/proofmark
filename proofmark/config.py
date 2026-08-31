@@ -9,7 +9,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
+# The default model. Override with PROOFMARK_MODEL so Azure/OpenAI users can set
+# their model once (in the shell / .zshrc) instead of passing --model every run.
+DEFAULT_MODEL = os.getenv("PROOFMARK_MODEL", "anthropic/claude-sonnet-4-6")
 
 # Explicit provider prefixes are authoritative and checked first — "azure/gpt-4.1"
 # is Azure, not OpenAI, even though it contains "gpt".
