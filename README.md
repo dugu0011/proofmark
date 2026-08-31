@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.4.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.11.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-67%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-157%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -183,6 +183,32 @@ inside the sandbox:
 - **Shell + Python** — run commands inside the sandbox for exploit development and validation.
 - **Verified auto-fix** — the agent writes a patch; Proofmark applies it in memory and accepts it *only if it applies cleanly*. A broken fix never reaches the report.
 
+### Proving blind bugs — out-of-band confirmation
+
+The worst bugs are blind: the response looks normal, but the target reaches back to a server
+you control. Proofmark ships a built-in **out-of-band listener** that mints unique canary URLs
+and records any callback — so blind SSRF, blind command injection, XXE exfiltration and blind
+SQL injection are *confirmed*, not guessed. Self-contained; no external collaborator service.
+
+### Dedicated exploit tools
+
+Beyond the generic HTTP/browser loop, Proofmark drives deterministic, per-class tools that
+detect and confirm mechanically — the reliable checks a freeform agent does inconsistently:
+
+| Tool | Proves |
+|---|---|
+| `sql_injection_test` | SQLi — error, boolean, and time-based |
+| `command_injection_test` | OS command injection / RCE — OOB, `id` output, `sleep` timing |
+| `ssrf_test` | SSRF — OOB canary + cloud-metadata / file reads |
+| `xxe_test` | XXE — OOB exfiltration + in-band file read |
+| `ssti_test` | Template injection — arithmetic eval + engine fingerprint |
+| `path_traversal_test` | LFI / path traversal — file-content signatures |
+| `open_redirect_test` | Open redirect — OOB-followed canary |
+| `jwt_attack_test` | JWT — alg=none forgery + weak-secret cracking |
+| `graphql_test` | GraphQL — introspection + sensitive-operation surfacing |
+| `xss_test` | XSS — real execution proof (a fired browser dialog) |
+| `coverage` | Systematic OWASP-Top-10 coverage tracking per endpoint |
+
 ### Vulnerability classes
 
 Broken access control (IDOR, privilege escalation, auth bypass) · injection (SQL,
@@ -197,6 +223,20 @@ agent** maps the target and is told explicitly *not* to exploit — it records w
 it finds — then an **exploit agent** starts from that map and proves what it can.
 Findings from every phase aggregate, and the authorization gate and signed record
 wrap the whole graph.
+
+### Measuring it — and comparing to other agents
+
+`benchmarks/score.py` scores a run's **recall** over a target's known bug classes.
+`benchmarks/compare.py` puts Proofmark **head to head** with another agent (e.g. Strix) on the
+same target, reporting recall *and* the **proven-finding count** — because a finding you can't
+reproduce shouldn't count the same as one you can. See [`benchmarks/README.md`](benchmarks/README.md).
+
+```
+Proofmark vs Strix — OWASP Juice Shop
+  Proofmark    findings 3 | proven 3 | recall 0.33 | matched A01, A03
+  Strix        findings 2 | proven 0 | recall 0.33 | matched A03, A05
+  proven-finding edge: Proofmark 3 vs Strix 0 (Proofmark)
+```
 
 ## Trust & safety
 
