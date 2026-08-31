@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.12.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.13.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-183%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-199%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -204,7 +204,7 @@ behind a WAF, scan its **local instance** or its **source code** (see [Usage](#u
 Proofmark's agents drive the same tools a professional tester would, each running
 inside the sandbox:
 
-- **Recon** — crawl same-host links, extract forms and their parameters, probe common paths (`.env`, `.git`, admin, api).
+- **Recon** — crawl same-host links, extract forms and parameters, probe common paths, and **mine API endpoints from JavaScript bundles** so single-page apps (React/Angular/Vue) still expose a real attack surface.
 - **Subdomain OSINT** — passive discovery from Certificate Transparency logs. Never probes what it finds; marks what is in scope.
 - **HTTP intercept proxy** — send, list, and **replay** requests with any field mutated. The capture-mutate-replay loop that confirms injection and authorization bugs.
 - **Browser** — a real headless Chromium for client-side bugs (reflected/stored/DOM XSS, CSRF). A fired dialog is captured as proof injected script executed.
@@ -236,6 +236,8 @@ detect and confirm mechanically — the reliable checks a freeform agent does in
 | `jwt_attack_test` | JWT — alg=none forgery + weak-secret cracking |
 | `graphql_test` | GraphQL — introspection + sensitive-operation surfacing |
 | `xss_test` | XSS — real execution proof (a fired browser dialog) |
+| `cors_test` | CORS — arbitrary-origin reflection / credentialed misconfiguration |
+| `csrf_test` | CSRF — a state-changing request accepted cross-origin, no token |
 | `coverage` | Systematic OWASP-Top-10 coverage tracking per endpoint |
 
 ### Vulnerability classes
@@ -324,6 +326,9 @@ proofmark scan -t https://your-app.com --authorized --rps 5
 
 # Enterprise CI: emit SARIF (GitHub code scanning) and fail the build only on high+
 proofmark scan -t https://your-app.com --authorized --sarif results.sarif --fail-on high
+
+# CI: only alert on NEW findings since a saved baseline
+proofmark scan -t https://your-app.com --authorized --baseline .proofmark-baseline.json
 ```
 
 ## CI/CD (GitHub Actions)
