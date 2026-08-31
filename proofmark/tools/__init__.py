@@ -15,6 +15,9 @@ from proofmark.tools.oob_tool import OobCanaryTool, OobCheckTool
 from proofmark.tools.sqli_tool import SqlInjectionTool
 from proofmark.tools.ssrf_tool import SsrfTool
 from proofmark.tools.cmdi_tool import CommandInjectionTool
+from proofmark.tools.ssti_tool import SstiTool
+from proofmark.tools.lfi_tool import PathTraversalTool
+from proofmark.tools.redirect_tool import OpenRedirectTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -24,5 +27,5 @@ __all__ = [
     "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool", "SubdomainTool",
     "AuthzProbeTool", "MassAssignmentTool", "ListFindingsTool",
     "OobCanaryTool", "OobCheckTool", "SqlInjectionTool", "SsrfTool",
-    "CommandInjectionTool",
+    "CommandInjectionTool", "SstiTool", "PathTraversalTool", "OpenRedirectTool",
 ]

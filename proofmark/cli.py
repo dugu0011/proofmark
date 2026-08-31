@@ -27,7 +27,8 @@ from proofmark.tools import (
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
     ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool, AuthzProbeTool,
     MassAssignmentTool, ListFindingsTool, OobCanaryTool, OobCheckTool,
-    SqlInjectionTool, SsrfTool, CommandInjectionTool,
+    SqlInjectionTool, SsrfTool, CommandInjectionTool, SstiTool, PathTraversalTool,
+    OpenRedirectTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -263,8 +264,10 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
-                    MassAssignmentTool(client), SqlInjectionTool(client), RunCommandTool(sandbox),
-                    *([OobCanaryTool(oob), OobCheckTool(oob), SsrfTool(client, oob), CommandInjectionTool(client, oob)]
+                    MassAssignmentTool(client), SqlInjectionTool(client),
+                    SstiTool(client), PathTraversalTool(client), RunCommandTool(sandbox),
+                    *([OobCanaryTool(oob), OobCheckTool(oob), SsrfTool(client, oob),
+                       CommandInjectionTool(client, oob), OpenRedirectTool(client, oob)]
                       if oob else [SsrfTool(client), CommandInjectionTool(client)]),
                     browser, record_tool, ListFindingsTool(record_tool),
                 ]
