@@ -87,6 +87,21 @@ class BrowserTool(Tool):
             self._unavailable = str(exc)
             return False
 
+    def navigate(self, url, js=None, fill=None, click=None, wait_ms=800) -> dict:
+        """Load a page and return the raw runner result (including `dialogs`, whose
+        presence proves injected script executed). Used by the xss tool to confirm
+        DOM/reflected XSS. Returns {"error": ...} on scope/availability/parse failure."""
+        if not self._auth.permits_host(url):
+            return {"error": f"out of scope: {url}"}
+        if not self._ensure():
+            return {"error": self._unavailable or "browser unavailable"}
+        spec = json.dumps({"url": url, "js": js, "fill": fill, "click": click, "wait_ms": wait_ms})
+        code, out = self._sb.exec(["python", self._runner_path, spec], timeout=45)
+        try:
+            return json.loads(out.strip())
+        except ValueError:
+            return {"error": f"browser run failed (exit {code}): {out[:300]}"}
+
     def run(self, **kwargs) -> ToolResult:
         url = kwargs.get("url", "")
         if not self._auth.permits_host(url):
