@@ -10,3 +10,8 @@ build/
 report.md
 .env
 .DS_Store
+
+# Scan output — run records/reports (may contain target + finding data; never commit)
+proofmark_runs/
+*.sarif
+.proofmark-baseline.json
