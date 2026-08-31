@@ -11,6 +11,7 @@ from proofmark.tools.subdomains_tool import SubdomainTool
 from proofmark.tools.authz_tool import AuthzProbeTool
 from proofmark.tools.mass_assignment_tool import MassAssignmentTool
 from proofmark.tools.list_findings_tool import ListFindingsTool
+from proofmark.tools.oob_tool import OobCanaryTool, OobCheckTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -19,4 +20,5 @@ __all__ = [
     "ListFilesTool", "ReadFileTool", "SearchCodeTool", "ReconTool",
     "ProposeFixTool", "FixLog", "BrowserTool", "NoteTool", "SubdomainTool",
     "AuthzProbeTool", "MassAssignmentTool", "ListFindingsTool",
+    "OobCanaryTool", "OobCheckTool",
 ]

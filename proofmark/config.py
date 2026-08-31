@@ -44,6 +44,13 @@ class RunConfig:
     # Safe mode blocks destructive HTTP methods (PUT/PATCH/DELETE) so the agent can
     # run against production without risk of altering data. On by default.
     safe_mode: bool = True
+    # Out-of-band listener for proving blind vulnerabilities (SSRF/RCE/XXE/SQLi).
+    # public_host/base override what the target should reach; blank = detected LAN IP.
+    oob_enabled: bool = True
+    oob_bind_host: str = "0.0.0.0"
+    oob_bind_port: int = 0
+    oob_public_host: str = ""
+    oob_public_base: str = ""
 
     @staticmethod
     def key_env_var_for(model: str) -> str | None:

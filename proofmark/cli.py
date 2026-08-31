@@ -26,7 +26,7 @@ from proofmark.tools import (
     HttpRequestTool, ListFilesTool, ListRequestsTool, ReadFileTool, ReconTool,
     RecordFindingTool, ReplayRequestTool, RunCommandTool, SearchCodeTool,
     ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool, AuthzProbeTool,
-    MassAssignmentTool, ListFindingsTool,
+    MassAssignmentTool, ListFindingsTool, OobCanaryTool, OobCheckTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -34,6 +34,7 @@ from proofmark.http_client import HttpClient, RequestLog, Request
 from proofmark import audit, specs
 from proofmark.source import prepare as prepare_source, SourceError
 from proofmark.prompts import code_mode_note
+from proofmark.oob import InteractionServer
 
 # Simple ANSI colour without a hard dependency on rich for the skeleton.
 C = {"dim": "\033[2m", "b": "\033[1m", "cyan": "\033[36m", "yellow": "\033[33m",
@@ -238,6 +239,10 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
     try:
         with Sandbox() as sandbox:
             req_log = RequestLog()
+            oob = InteractionServer(
+                bind_host=cfg.oob_bind_host, bind_port=cfg.oob_bind_port,
+                public_host=cfg.oob_public_host, public_base=cfg.oob_public_base,
+            ) if cfg.oob_enabled else None
             browser = BrowserTool(auth, artifacts_dir=run_dir)
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
@@ -258,9 +263,12 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),
                     ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
                     MassAssignmentTool(client), RunCommandTool(sandbox),
+                    *([OobCanaryTool(oob), OobCheckTool(oob)] if oob else []),
                     browser, record_tool, ListFindingsTool(record_tool),
                 ]
                 suffix = (spec_briefing + "\n\n" + API_PLAYBOOK).strip() if spec_briefing else API_PLAYBOOK
+                if oob:
+                    suffix = (suffix + "\n\n" + OOB_PLAYBOOK).strip()
 
             suffix = (suffix + "\n\n" + CHAIN_PLAYBOOK).strip()
             if auth_headers or auth_cookies:
@@ -315,6 +323,8 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 _llms[id(_l)] = _l
             run_usage = _aggregate_usage(list(_llms.values()))
             browser.close()
+            if oob:
+                oob.close()
     except SandboxError as exc:
         _fail(f"Sandbox error: {exc}")
     finally:
@@ -533,6 +543,18 @@ def doctor():
 
     sys.exit(0 if ok else 1)
 
+
+OOB_PLAYBOOK = (
+    "OUT-OF-BAND CONFIRMATION. The most serious bugs are often blind: the response looks "
+    "normal, but the target reaches a server you control. Prove them — call oob_canary to "
+    "mint a url/host, plant it in the payload, trigger it, then call oob_check.\n"
+    "- Blind SSRF: put the http url where the app fetches a URL (?url=, webhook, avatar-by-url, "
+    "PDF/HTML render, link preview).\n"
+    "- Blind command injection / RCE: inject `curl <http-url>` or `nslookup <dns-host>`.\n"
+    "- XXE: use an external entity that fetches the http url.\n"
+    "- Blind SQLi on a stacked/loadable backend: trigger an outbound request to the url.\n"
+    "A recorded interaction from oob_check is PROOF — record the finding and cite it."
+)
 
 AUTH_NOTE = (
     "AUTHENTICATED SESSION: credentials are attached to every request, so you are "
