@@ -103,7 +103,7 @@ def main(ctx: click.Context) -> None:
 @click.option("--rps", default=0.0, show_default=True, help="Max requests/second to the target (0 = unlimited). Use e.g. 5 to be gentle on production.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--sarif", default="", help="Also write findings as SARIF 2.1.0 to this path (feeds CI / GitHub code scanning).")
-@click.option("--fail-on", "fail_on", type=click.Choice(["critical", "high", "medium", "low", "info"]), default="", help="Exit non-zero only if a finding at or above this severity is proven (default: any finding).")
+@click.option("--fail-on", "fail_on", type=click.Choice(["critical", "high", "medium", "low", "info"]), default=None, help="Exit non-zero only if a finding at or above this severity is proven (default: any finding).")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
