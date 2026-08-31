@@ -188,6 +188,28 @@ class HttpClient:
         self.log.add(request, data.get("status"), (data.get("body") or "")[:1200])
         return data
 
+    def send_full(self, request: Request, *, identity: str | None = None) -> dict:
+        """One request, returning the full runner result ({status, headers, body} or
+        {error}). Used by the login helper, which needs Set-Cookie / the token body."""
+        if not self._auth.permits_host(request.url):
+            return {"error": f"out of scope: {request.url}"}
+        if self.safe_mode and request.method.upper() in self.DESTRUCTIVE:
+            return {"error": f"blocked by safe mode: {request.method.upper()}"}
+        spec = json.dumps({
+            "method": request.method, "url": request.url,
+            "headers": self._apply_auth(request.headers, identity), "body": request.body,
+            "timeout": 20,
+        })
+        self._throttle()
+        code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
+        try:
+            data = json.loads(out.strip())
+        except ValueError:
+            return {"error": f"runner exit {code}: {out[:200]}"}
+        self.log.add(request, data.get("status"), (data.get("body") or "")[:1200],
+                     error=data.get("error"))
+        return data
+
     def send(self, request: Request, *, identity: str | None = None) -> tuple[bool, str, Exchange]:
         """Returns (ok, text_for_the_agent, logged_exchange).
 

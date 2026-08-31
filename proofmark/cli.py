@@ -97,6 +97,12 @@ def main(ctx: click.Context) -> None:
 @click.option("--second-auth-header", "second_headers_raw", multiple=True, help="Header for a SECOND identity (a different user/role) the agent can replay a request as, to test broken access control (BOLA/BFLA). Repeatable.")
 @click.option("--second-auth-cookie", "second_cookies_raw", multiple=True, help="Cookie for the second identity. Repeatable.")
 @click.option("--second-identity-label", default="second user", show_default=True, help="How the second identity is named in the report.")
+@click.option("--login-url", default="", help="Log in first by POSTing credentials here, then scan with the resulting session (URL targets).")
+@click.option("--username", default="", help="Username for --login-url.")
+@click.option("--password", default="", help="Password for --login-url.")
+@click.option("--login-user-field", default="username", show_default=True, help="Field name for the username in the login request.")
+@click.option("--login-pass-field", default="password", show_default=True, help="Field name for the password in the login request.")
+@click.option("--login-json", is_flag=True, help="Send the login as JSON instead of form-encoded.")
 @click.option("--suppress", "suppress_titles", multiple=True, help="A finding title to treat as a known false positive and never report. Repeatable.")
 @click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
@@ -107,7 +113,7 @@ def main(ctx: click.Context) -> None:
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, suppress_titles, time_budget, rps, output, sarif, fail_on, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
@@ -250,6 +256,18 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 public_host=cfg.oob_public_host, public_base=cfg.oob_public_base,
             ) if cfg.oob_enabled else None
             browser = BrowserTool(auth, artifacts_dir=run_dir)
+            if login_url and not is_code:
+                from proofmark.login import perform_login
+                login_client = HttpClient(sandbox, auth, RequestLog(), safe_mode=cfg.safe_mode, rps=rps)
+                lr = perform_login(login_client, login_url, username, password,
+                                   user_field=login_user_field, pass_field=login_pass_field,
+                                   as_json=login_json)
+                click.echo(f"{C['dim']}login: {lr.detail}{C['reset']}")
+                if lr.ok:
+                    auth_headers = {**auth_headers, **lr.headers}
+                    auth_cookies = {**auth_cookies, **lr.cookies}
+                else:
+                    click.echo(f"{C['yellow']}proceeding without login{C['reset']}")
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
