@@ -146,6 +146,55 @@ proofmark replay proofmark_runs/20260101-120000    # does the exploit still work
 export PROOFMARK_SIGNING_KEY="..."                 # HMAC-sign records — now attributable, not just unaltered
 ```
 
+## What a run looks like
+
+A scan streams its reasoning and every request live, then writes a signed report.
+Against a vulnerable target it **proves** findings; against a hardened one it honestly
+reports nothing (a clean run is evidence, not proof of absence).
+
+**A run that finds bugs** — OWASP Juice Shop (example):
+
+```text
+$ proofmark scan -t http://host.docker.internal:3001 --authorized --operator you --allow-host host.docker.internal
+
+Proofmark v0.11.0  ·  target http://host.docker.internal:3001 (url)
+authorized by you · scope: host.docker.internal · model anthropic/claude-sonnet-4-6
+starting sandbox…
+─ agent working ─
+  → recon {"url":"http://host.docker.internal:3001","probe_paths":true}
+  ← Mapped 12 page(s), 63 link(s), 4 form(s).
+  → sql_injection_test {"url":".../rest/products/search?q=apple","param":"q"}
+  ← SQL INJECTION LIKELY on 'q' (high). ERROR-BASED — payload "apple'" triggered a DB error.
+  → http_request {...}                       # reproduces the exploit
+  ← record_finding: SQL injection in product search
+  ✓ 2 proven finding(s) in 24 step(s).
+  41,203 tokens · ~$0.08
+run record (verifiable) → proofmark_runs/20260831-120000
+```
+
+The report (`proofmark_runs/<id>/report.md`) lists each proven finding with its
+proof-of-concept and fix:
+
+```markdown
+### 1. SQL injection in product search (critical)
+- Location: GET /rest/products/search?q=
+- OWASP A03:2021 Injection · CWE-89
+- Proof: `q=apple'` returned a SQLite error; `q=apple'))--` dumped all product rows.
+- Fix: use parameterized queries — never build SQL by concatenating input.
+```
+
+**A clean run** — a static, WAF-protected site honestly reports nothing:
+
+```text
+  ✓ Reconnaissance shows a static, read-only site; sensitive paths return 403
+    (platform WAF). No attack surface exposed.
+  0 proven finding(s) in 6 step(s).
+```
+
+That is the *expected* result when nothing exploitable is reachable — it means the
+agent could not prove an exploit, not that none exists. To test an app that sits
+behind a WAF, scan its **local instance** or its **source code** (see [Usage](#usage--what-you-can-test)).
+
 ## Features
 
 ### Agentic toolkit
