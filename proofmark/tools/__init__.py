@@ -18,6 +18,9 @@ from proofmark.tools.cmdi_tool import CommandInjectionTool
 from proofmark.tools.ssti_tool import SstiTool
 from proofmark.tools.lfi_tool import PathTraversalTool
 from proofmark.tools.redirect_tool import OpenRedirectTool
+from proofmark.tools.jwt_tool import JwtAttackTool
+from proofmark.tools.xxe_tool import XxeTool
+from proofmark.tools.graphql_tool import GraphQLTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -28,4 +31,5 @@ __all__ = [
     "AuthzProbeTool", "MassAssignmentTool", "ListFindingsTool",
     "OobCanaryTool", "OobCheckTool", "SqlInjectionTool", "SsrfTool",
     "CommandInjectionTool", "SstiTool", "PathTraversalTool", "OpenRedirectTool",
+    "JwtAttackTool", "XxeTool", "GraphQLTool",
 ]
