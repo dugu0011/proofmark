@@ -46,6 +46,9 @@ class RunConfig:
     # Safe mode blocks destructive HTTP methods (PUT/PATCH/DELETE) so the agent can
     # run against production without risk of altering data. On by default.
     safe_mode: bool = True
+    # Client-side rate limit in requests/second (0 = unlimited). Protects a
+    # production target from being hammered.
+    rps: float = 0
     # Out-of-band listener for proving blind vulnerabilities (SSRF/RCE/XXE/SQLi).
     # public_host/base override what the target should reach; blank = detected LAN IP.
     oob_enabled: bool = True

@@ -100,11 +100,12 @@ def main(ctx: click.Context) -> None:
 @click.option("--suppress", "suppress_titles", multiple=True, help="A finding title to treat as a known false positive and never report. Repeatable.")
 @click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
+@click.option("--rps", default=0.0, show_default=True, help="Max requests/second to the target (0 = unlimited). Use e.g. 5 to be gentle on production.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, suppress_titles, time_budget, output, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, suppress_titles, time_budget, rps, output, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
@@ -250,7 +251,7 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
             if is_code:
                 click.echo(f"{C['dim']}copying source into the jail…{C['reset']}")
                 sandbox.copy_in(source.root)
-                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities, rps=rps)
                 record_tool = RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set)
                 tools = [
                     ListFilesTool(sandbox), ReadFileTool(sandbox), SearchCodeTool(sandbox),
@@ -260,7 +261,7 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 ]
                 suffix = code_mode_note()
             else:
-                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities)
+                client = HttpClient(sandbox, auth, req_log, safe_mode=cfg.safe_mode, auth_headers=auth_headers, auth_cookies=auth_cookies, identities=identities, rps=rps)
                 record_tool = RecordFindingTool(req_log, require_replay=not is_code, suppress_titles=suppress_set)
                 tools = [
                     ReconTool(client), SubdomainTool(sandbox, auth), HttpRequestTool(client),

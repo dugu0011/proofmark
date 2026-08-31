@@ -9,6 +9,7 @@ real injection or authorization bug is actually confirmed.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 
 from proofmark.authorization import Authorization
@@ -82,7 +83,8 @@ class HttpClient:
     def __init__(self, sandbox: Sandbox, authorization: Authorization, log: RequestLog,
                  *, safe_mode: bool = True, auth_headers: dict | None = None,
                  auth_cookies: dict | None = None,
-                 identities: dict[str, dict] | None = None) -> None:
+                 identities: dict[str, dict] | None = None,
+                 rps: float = 0) -> None:
         self._sb = sandbox
         self._auth = authorization
         self.log = log
@@ -99,6 +101,19 @@ class HttpClient:
         # In-run cache of idempotent responses, so re-fetching the same page does
         # not cost another sandbox round-trip or another wall of tokens.
         self._cache: dict[str, tuple] = {}
+        # Optional client-side rate limit (requests/sec). 0 = unlimited. Keeps a
+        # scan from hammering a production target beyond what the operator allows.
+        self._min_interval = (1.0 / rps) if rps and rps > 0 else 0.0
+        self._last_send_ts = 0.0
+
+    def _throttle(self) -> None:
+        """Sleep as needed to hold requests to the configured rate."""
+        if self._min_interval <= 0:
+            return
+        wait = self._min_interval - (time.monotonic() - self._last_send_ts)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_send_ts = time.monotonic()
 
     def _creds_for(self, identity: str | None) -> tuple[dict, dict]:
         """(headers, cookies) for a named identity. None/'primary' = the run's own."""
@@ -160,6 +175,7 @@ class HttpClient:
             "method": request.method, "url": request.url,
             "headers": self._apply_auth(request.headers), "body": request.body, "timeout": 20,
         })
+        self._throttle()
         code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
         try:
             data = json.loads(out.strip())
@@ -208,6 +224,7 @@ class HttpClient:
             "method": request.method, "url": request.url,
             "headers": self._apply_auth(request.headers, identity), "body": request.body, "timeout": 20,
         })
+        self._throttle()
         code, out = self._sb.exec(["python", self._sb.runner_path, spec], timeout=30)
         out = out.strip()
         try:
