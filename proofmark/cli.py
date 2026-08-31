@@ -81,7 +81,20 @@ def main(ctx: click.Context) -> None:
         click.echo(ctx.get_help())
 
 
+def _load_config_cb(ctx, param, value):
+    if value:
+        from proofmark.appconfig import load_config, ConfigError
+        try:
+            cfg = load_config(value)
+        except ConfigError as exc:
+            raise click.BadParameter(str(exc))
+        ctx.default_map = {**(ctx.default_map or {}), **cfg}
+    return value
+
+
 @main.command()
+@click.option("--config", callback=_load_config_cb, is_eager=True, expose_value=False,
+              help="Load options from a YAML/JSON file (CLI flags override).")
 @click.option("-t", "--target", required=True, help="A live URL, a git repo, or a local path.")
 @click.option("--authorized", is_flag=True, help="Assert you are authorized to test this target.")
 @click.option("--operator", default="", help="Who is running this (recorded in the report).")
