@@ -111,10 +111,12 @@ def main(ctx: click.Context) -> None:
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--sarif", default="", help="Also write findings as SARIF 2.1.0 to this path (feeds CI / GitHub code scanning).")
 @click.option("--fail-on", "fail_on", type=click.Choice(["critical", "high", "medium", "low", "info"]), default=None, help="Exit non-zero only if a finding at or above this severity is proven (default: any finding).")
+@click.option("--baseline", default="", help="Compare against this baseline file and surface/gate on only NEW findings. Created on first use.")
+@click.option("--update-baseline", is_flag=True, help="Overwrite the --baseline file with this run's findings (accept them as known).")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
@@ -419,14 +421,29 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
         click.echo("")
         click.echo(report)
 
+    # Baseline: gate on only NEW findings when a baseline is in play.
+    gate_findings = record.findings
+    if baseline:
+        import proofmark.baseline as _bl
+        known = _bl.read(baseline)
+        if known is None or update_baseline:
+            written = _bl.write(record.findings, baseline)
+            verb = "updated" if update_baseline else "written"
+            click.echo(f"{C['dim']}baseline {verb}: {baseline} ({written} finding(s)){C['reset']}")
+            gate_findings = []
+        else:
+            gate_findings = _bl.new_findings(record.findings, known)
+            click.echo(f"{C['dim']}vs baseline: {len(gate_findings)} new, "
+                       f"{len(record.findings) - len(gate_findings)} known{C['reset']}")
+
     # Non-zero exit for CI. --fail-on gates on a severity threshold; otherwise any finding.
     if fail_on:
         rank = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
         threshold = rank.get(fail_on, 0)
         hit = any(rank.get((f.get("severity") or "info").lower(), 0) >= threshold
-                  for f in record.findings)
+                  for f in gate_findings)
         sys.exit(1 if hit else 0)
-    sys.exit(1 if n else 0)
+    sys.exit(1 if gate_findings else 0)
 
 
 @main.command()
