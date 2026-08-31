@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.13.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.14.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-199%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-211%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -238,6 +238,8 @@ detect and confirm mechanically — the reliable checks a freeform agent does in
 | `xss_test` | XSS — real execution proof (a fired browser dialog) |
 | `cors_test` | CORS — arbitrary-origin reflection / credentialed misconfiguration |
 | `csrf_test` | CSRF — a state-changing request accepted cross-origin, no token |
+| `nosql_injection_test` | NoSQL (Mongo) operator injection — $ne/$gt/$regex, auth bypass |
+| `subdomain_takeover_test` | Subdomain takeover — dangling CNAME to an unclaimed service |
 | `coverage` | Systematic OWASP-Top-10 coverage tracking per endpoint |
 
 ### Vulnerability classes
@@ -329,6 +331,22 @@ proofmark scan -t https://your-app.com --authorized --sarif results.sarif --fail
 
 # CI: only alert on NEW findings since a saved baseline
 proofmark scan -t https://your-app.com --authorized --baseline .proofmark-baseline.json
+
+# Set options once in a file instead of a long flag line (CLI flags still override)
+proofmark scan --config proofmark.yml --authorized
+```
+
+A `proofmark.yml` looks like:
+
+```yaml
+target: https://your-app.com
+model: azure/gpt-4.1
+rps: 5
+sarif: results.sarif
+fail_on: high
+login:
+  url: https://your-app.com/login
+  username: you@you.com
 ```
 
 ## CI/CD (GitHub Actions)
