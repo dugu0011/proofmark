@@ -102,10 +102,12 @@ def main(ctx: click.Context) -> None:
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
 @click.option("--rps", default=0.0, show_default=True, help="Max requests/second to the target (0 = unlimited). Use e.g. 5 to be gentle on production.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
+@click.option("--sarif", default="", help="Also write findings as SARIF 2.1.0 to this path (feeds CI / GitHub code scanning).")
+@click.option("--fail-on", "fail_on", type=click.Choice(["critical", "high", "medium", "low", "info"]), default="", help="Exit non-zero only if a finding at or above this severity is proven (default: any finding).")
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, suppress_titles, time_budget, rps, output, run_dir, events_file, control_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, suppress_titles, time_budget, rps, output, sarif, fail_on, run_dir, events_file, control_file):
     """Run the agent against a target and report what it can prove."""
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
@@ -375,6 +377,13 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
     for i, fx in enumerate(fix_log.fixes, 1):
         (out_dir / f"fix-{i}.patch").write_text(fx["diff"] + "\n", encoding="utf-8")
     (out_dir / "report.md").write_text(report, encoding="utf-8")
+    if sarif:
+        import json as _json
+        from proofmark.sarif import to_sarif
+        Path(sarif).write_text(
+            _json.dumps(to_sarif(record.findings, target=target, version=VERSION), indent=2),
+            encoding="utf-8")
+        click.echo(f"{C['dim']}SARIF written to {sarif}{C['reset']}")
     _env = __import__("os").environ
     if _env.get(audit.SIGNING_PRIVATE_ENV):
         signed = "ed25519-signed"
@@ -390,7 +399,13 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
         click.echo("")
         click.echo(report)
 
-    # Non-zero exit when something was found, so CI can gate on it.
+    # Non-zero exit for CI. --fail-on gates on a severity threshold; otherwise any finding.
+    if fail_on:
+        rank = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+        threshold = rank.get(fail_on, 0)
+        hit = any(rank.get((f.get("severity") or "info").lower(), 0) >= threshold
+                  for f in record.findings)
+        sys.exit(1 if hit else 0)
     sys.exit(1 if n else 0)
 
 
