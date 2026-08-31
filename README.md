@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.11.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.12.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-157%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-183%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -315,6 +315,15 @@ proofmark scan -t https://your-app.com --authorized --auth-header "Authorization
 
 # Save the report to a file (exit code is non-zero if anything is proven — good for CI)
 proofmark scan -t https://your-app.com --authorized -o report.md
+
+# Log in automatically, then scan as that user (no more copying cookies by hand)
+proofmark scan -t https://your-app.com --authorized --login-url https://your-app.com/login --username you@you.com --password "<pw>"
+
+# Be gentle on production: cap the request rate
+proofmark scan -t https://your-app.com --authorized --rps 5
+
+# Enterprise CI: emit SARIF (GitHub code scanning) and fail the build only on high+
+proofmark scan -t https://your-app.com --authorized --sarif results.sarif --fail-on high
 ```
 
 ## CI/CD (GitHub Actions)
