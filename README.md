@@ -233,33 +233,37 @@ proofmark scan -t https://app.you.own --authorized --strategy graph \
 proofmark verify proofmark_runs/<run-id>           # anyone can verify, no secret
 ```
 
-## Usage
+## Usage — what you can test
+
+Point `-t` at any of these. **Local or hosted, a running app or source code** — all are first-class:
+
+| Scenario | Command |
+|---|---|
+| **App running on your own machine** | `proofmark scan -t http://host.docker.internal:PORT --authorized --allow-host host.docker.internal` |
+| **Hosted / remote URL** (staging, prod you own) | `proofmark scan -t https://your-app.com --authorized` |
+| **Local source folder** — read *and run* to prove bugs | `proofmark scan -t ./my-service --authorized` |
+| **Git repository** | `proofmark scan -t owner/repo --authorized` |
+| **OpenAPI / Swagger spec** | `proofmark scan -t ./openapi.yaml --base-url https://api.your-app.com --authorized` |
+| **Postman collection** | `proofmark scan -t ./collection.json --base-url https://api.your-app.com --authorized` |
+
+> **Testing a local app** on macOS / Windows Docker Desktop? Use **`host.docker.internal:PORT`**,
+> not `localhost` — the scan runs inside a sandbox container — and add `--allow-host host.docker.internal`.
+> (On Linux, use your Docker gateway IP, often `172.17.0.1`.)
+
+Add any of these to a scan:
 
 ```bash
-# A live web application
-proofmark scan -t https://your-app.test --authorized
+# Go deeper: recon maps the surface, exploit proves it (multi-agent)
+proofmark scan -t https://your-app.com --authorized --strategy graph --max-steps 60
 
-# A local codebase — the agent reads AND runs it in the sandbox to prove bugs
-proofmark scan -t ./my-service --authorized
+# Authenticated: test as a logged-in user (reaches access-control bugs)
+proofmark scan -t https://your-app.com --authorized --auth-header "Authorization: Bearer <token>"
 
-# A git repository (shorthand or full URL)
-proofmark scan -t owner/repo --authorized
+# Broken access control between two users (BOLA / BFLA): give it a second identity
+proofmark scan -t https://your-app.com --authorized --auth-header "Authorization: Bearer <user-A>" --second-auth-header "Authorization: Bearer <user-B>"
 
-# An OpenAPI / Swagger spec, tested against its server
-proofmark scan -t ./openapi.yaml --base-url https://api.your-app.test --authorized
-
-# A Postman collection
-proofmark scan -t ./collection.json --base-url https://api.your-app.test --authorized
-
-# A graph of agents: recon maps, exploit proves
-proofmark scan -t https://your-app.test --authorized --strategy graph
-
-# Authenticated: test as a logged-in user (repeatable), to reach authz bugs
-proofmark scan -t https://your-app.test --authorized \
-  --auth-header "Authorization: Bearer <token>" --auth-cookie "session=<value>"
-
-# Write the report to a file (exits non-zero if anything is proven — good for CI)
-proofmark scan -t https://your-app.test --authorized -o report.md
+# Save the report to a file (exit code is non-zero if anything is proven — good for CI)
+proofmark scan -t https://your-app.com --authorized -o report.md
 ```
 
 ## CI/CD (GitHub Actions)
