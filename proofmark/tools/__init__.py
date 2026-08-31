@@ -22,6 +22,7 @@ from proofmark.tools.jwt_tool import JwtAttackTool
 from proofmark.tools.xxe_tool import XxeTool
 from proofmark.tools.graphql_tool import GraphQLTool
 from proofmark.tools.xss_tool import XssTool
+from proofmark.tools.coverage_tool import CoverageTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -32,5 +33,5 @@ __all__ = [
     "AuthzProbeTool", "MassAssignmentTool", "ListFindingsTool",
     "OobCanaryTool", "OobCheckTool", "SqlInjectionTool", "SsrfTool",
     "CommandInjectionTool", "SstiTool", "PathTraversalTool", "OpenRedirectTool",
-    "JwtAttackTool", "XxeTool", "GraphQLTool", "XssTool",
+    "JwtAttackTool", "XxeTool", "GraphQLTool", "XssTool", "CoverageTool",
 ]

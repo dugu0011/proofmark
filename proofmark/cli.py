@@ -28,7 +28,7 @@ from proofmark.tools import (
     ProposeFixTool, FixLog, BrowserTool, NoteTool, SubdomainTool, AuthzProbeTool,
     MassAssignmentTool, ListFindingsTool, OobCanaryTool, OobCheckTool,
     SqlInjectionTool, SsrfTool, CommandInjectionTool, SstiTool, PathTraversalTool,
-    OpenRedirectTool, JwtAttackTool, XxeTool, GraphQLTool, XssTool,
+    OpenRedirectTool, JwtAttackTool, XxeTool, GraphQLTool, XssTool, CoverageTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -37,6 +37,7 @@ from proofmark import audit, specs
 from proofmark.source import prepare as prepare_source, SourceError
 from proofmark.prompts import code_mode_note
 from proofmark.oob import InteractionServer
+from proofmark.coverage import CoverageBoard
 
 # Simple ANSI colour without a hard dependency on rich for the skeleton.
 C = {"dim": "\033[2m", "b": "\033[1m", "cyan": "\033[36m", "yellow": "\033[33m",
@@ -266,7 +267,8 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                     ListRequestsTool(client), ReplayRequestTool(client), AuthzProbeTool(client),
                     MassAssignmentTool(client), SqlInjectionTool(client),
                     SstiTool(client), PathTraversalTool(client),
-                    JwtAttackTool(), GraphQLTool(client), RunCommandTool(sandbox),
+                    JwtAttackTool(), GraphQLTool(client), CoverageTool(CoverageBoard()),
+                    RunCommandTool(sandbox),
                     XssTool(browser),
                     *([OobCanaryTool(oob), OobCheckTool(oob), SsrfTool(client, oob),
                        CommandInjectionTool(client, oob), OpenRedirectTool(client, oob),
