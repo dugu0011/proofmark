@@ -475,6 +475,21 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
 
 
 @main.command()
+@click.argument("run_name", required=False, default="")
+@click.option("--host", default="127.0.0.1", show_default=True,
+              help="Bind address. Use 0.0.0.0 to reach it from other machines.")
+@click.option("--port", default=0, type=int, help="Port (0 = a random free port).")
+@click.option("--no-open", is_flag=True, help="Do not open a browser automatically.")
+@click.option("--runs-dir", default=audit.RUNS_DIR, show_default=True,
+              help="Where run records are stored.")
+def view(run_name, host, port, no_open, runs_dir):
+    """Open a local dashboard of your scan runs in the browser (reads them off disk)."""
+    from proofmark.viewer import serve
+    serve(runs_dir=runs_dir, run_name=run_name or None, host=host, port=port,
+          open_browser=not no_open)
+
+
+@main.command()
 @click.argument("run_dir")
 def verify(run_dir):
     """Check that a run record is intact (and its signature, if signed)."""

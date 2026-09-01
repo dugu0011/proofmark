@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.15.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.16.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-215%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-220%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -196,6 +196,18 @@ proof-of-concept and fix:
 That is the *expected* result when nothing exploitable is reachable — it means the
 agent could not prove an exploit, not that none exists. To test an app that sits
 behind a WAF, scan its **local instance** or its **source code** (see [Usage](#usage--what-you-can-test)).
+
+## Local web viewer
+
+Every scan writes its results to disk. Browse them in a local dashboard — no cloud, no account, nothing leaves your machine:
+
+```bash
+proofmark view                 # newest runs, opens your browser
+proofmark view my-run-name     # jump straight to one run
+proofmark view --host 0.0.0.0 --port 8080 --no-open   # reach it from another machine
+```
+
+`proofmark view` starts a tiny server bound to `127.0.0.1` on a random port and opens a private, token-gated page. It reads the run records straight off disk — findings with severity, proof-of-concept, and evidence, plus a history of past runs. The token in the printed URL grants access to your run data, so only share it with trusted users when you use `--host 0.0.0.0`.
 
 ## Features
 
