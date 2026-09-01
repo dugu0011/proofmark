@@ -93,10 +93,41 @@ def _load_config_cb(ctx, param, value):
     return value
 
 
+def _collect_targets(target, target_list):
+    """All targets from repeated -t plus an optional --target-list file (deduped, ordered)."""
+    targets = list(target or [])
+    if target_list:
+        for _ln in Path(target_list).read_text(encoding="utf-8").splitlines():
+            _ln = _ln.strip()
+            if _ln and not _ln.startswith("#"):
+                targets.append(_ln)
+    return list(dict.fromkeys(t for t in targets if t))
+
+
+def _passthrough_argv(argv):
+    """argv after `scan`, with the -t/--target/--target-list flags removed — the rest is
+    replayed verbatim to each per-target child run."""
+    try:
+        i = argv.index("scan")
+    except ValueError:
+        i = 0
+    out, skip = [], False
+    for tok in argv[i + 1:]:
+        if skip:
+            skip = False; continue
+        if tok in ("-t", "--target", "--target-list"):
+            skip = True; continue
+        if tok.startswith(("--target=", "-t=", "--target-list=")):
+            continue
+        out.append(tok)
+    return out
+
+
 @main.command()
 @click.option("--config", callback=_load_config_cb, is_eager=True, expose_value=False,
               help="Load options from a YAML/JSON file (CLI flags override).")
-@click.option("-t", "--target", required=True, help="A live URL, a git repo, or a local path.")
+@click.option("-t", "--target", multiple=True, help="A live URL, a git repo, or a local path. Repeatable (-t a -t b).")
+@click.option("--target-list", default="", help="File of targets, one per non-comment line, each scanned in its own run.")
 @click.option("--authorized", is_flag=True, help="Assert you are authorized to test this target.")
 @click.option("--operator", default="", help="Who is running this (recorded in the report).")
 @click.option("--model", default=DEFAULT_MODEL, show_default=True, help="LLM, litellm-style.")
@@ -133,8 +164,25 @@ def _load_config_cb(ctx, param, value):
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
 @click.option("--instruction", default="", help="Free-form guidance to steer the agent: scope, focus areas, rules of engagement.")
 @click.option("--instruction-file", default="", help="Read agent guidance from a file (scope / rules of engagement / exclusions).")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file, instruction, instruction_file, scan_mode):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file, instruction, instruction_file, scan_mode, target_list):
     """Run the agent against a target and report what it can prove."""
+    try:
+        targets = _collect_targets(target, target_list)
+    except OSError as exc:
+        _fail(f"could not read --target-list {target_list}: {exc}")
+    if not targets:
+        _fail("no target — pass -t <url|repo|path> or --target-list <file>.")
+    if len(targets) > 1:
+        import subprocess
+        rest = _passthrough_argv(sys.argv)
+        codes = []
+        for _t in targets:
+            click.echo(f"\n{C['b']}══════ target: {_t} ══════{C['reset']}")
+            codes.append(subprocess.run([sys.executable, "-m", "proofmark", "scan", "-t", _t, *rest]).returncode)
+        _hit = sum(1 for c in codes if c != 0)
+        click.echo(f"\n{C['dim']}{len(targets)} targets scanned; {_hit} had findings or failed.{C['reset']}")
+        sys.exit(1 if _hit else 0)
+    target = targets[0]
     instruction_text = (instruction or "").strip()
     if instruction_file:
         try:
