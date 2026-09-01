@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.14.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.15.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-211%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-215%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -240,6 +240,8 @@ detect and confirm mechanically — the reliable checks a freeform agent does in
 | `csrf_test` | CSRF — a state-changing request accepted cross-origin, no token |
 | `nosql_injection_test` | NoSQL (Mongo) operator injection — $ne/$gt/$regex, auth bypass |
 | `subdomain_takeover_test` | Subdomain takeover — dangling CNAME to an unclaimed service |
+| `prototype_pollution_test` | Prototype pollution (Node/JS) — __proto__ leaks into a later response |
+| `race_condition_test` | Race condition (TOCTOU) — concurrent requests slip past a once-only action |
 | `coverage` | Systematic OWASP-Top-10 coverage tracking per endpoint |
 
 ### Vulnerability classes
@@ -334,6 +336,10 @@ proofmark scan -t https://your-app.com --authorized --baseline .proofmark-baseli
 
 # Set options once in a file instead of a long flag line (CLI flags still override)
 proofmark scan --config proofmark.yml --authorized
+
+# Steer scope / focus / rules of engagement
+proofmark scan -t https://your-app.com --authorized --instruction "Focus on IDOR and business-logic flaws; do not touch /admin."
+proofmark scan -t https://your-app.com --authorized --instruction-file ./rules-of-engagement.md
 ```
 
 A `proofmark.yml` looks like:

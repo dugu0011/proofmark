@@ -27,6 +27,8 @@ from proofmark.tools.cors_tool import CorsTool
 from proofmark.tools.csrf_tool import CsrfTool
 from proofmark.tools.nosql_tool import NoSqlInjectionTool
 from proofmark.tools.takeover_tool import SubdomainTakeoverTool
+from proofmark.tools.protopollution_tool import PrototypePollutionTool
+from proofmark.tools.race_tool import RaceConditionTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -39,4 +41,5 @@ __all__ = [
     "CommandInjectionTool", "SstiTool", "PathTraversalTool", "OpenRedirectTool",
     "JwtAttackTool", "XxeTool", "GraphQLTool", "XssTool", "CoverageTool",
     "CorsTool", "CsrfTool", "NoSqlInjectionTool", "SubdomainTakeoverTool",
+    "PrototypePollutionTool", "RaceConditionTool",
 ]
