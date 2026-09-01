@@ -129,8 +129,17 @@ def _load_config_cb(ctx, param, value):
 @click.option("--run-dir", default=audit.RUNS_DIR, show_default=True, help="Where to save the tamper-evident run record.")
 @click.option("--events-file", default="", help="Append each agent event as JSONL here (live streaming).")
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file):
+@click.option("--instruction", default="", help="Free-form guidance to steer the agent: scope, focus areas, rules of engagement.")
+@click.option("--instruction-file", default="", help="Read agent guidance from a file (scope / rules of engagement / exclusions).")
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file, instruction, instruction_file):
     """Run the agent against a target and report what it can prove."""
+    instruction_text = (instruction or "").strip()
+    if instruction_file:
+        try:
+            _extra = Path(instruction_file).read_text(encoding="utf-8", errors="replace").strip()
+        except OSError as exc:
+            _fail(f"could not read --instruction-file {instruction_file}: {exc}")
+        instruction_text = (instruction_text + "\n\n" + _extra).strip() if instruction_text else _extra
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
         recon_model=recon_model, exploit_model=exploit_model, api_base=api_base,
@@ -324,6 +333,9 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                 suffix = (suffix + "\n\n" + AUTH_NOTE).strip()
             if identities:
                 suffix = (suffix + "\n\n" + SECOND_IDENTITY_NOTE).strip()
+            if instruction_text:
+                suffix = (suffix + "\n\n## Operator instruction (scope / focus — follow this)\n"
+                          + instruction_text).strip()
             llm = LLM(model, api_base=api_base)
             run_target = source.label if source else target
             started_at = datetime.now(timezone.utc).isoformat()
