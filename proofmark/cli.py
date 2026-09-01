@@ -30,7 +30,7 @@ from proofmark.tools import (
     SqlInjectionTool, SsrfTool, CommandInjectionTool, SstiTool, PathTraversalTool,
     OpenRedirectTool, JwtAttackTool, XxeTool, GraphQLTool, XssTool, CoverageTool,
     CorsTool, CsrfTool, NoSqlInjectionTool, SubdomainTakeoverTool,
-    PrototypePollutionTool, RaceConditionTool,
+    PrototypePollutionTool, RaceConditionTool, DeserializationTool, SessionFixationTool,
 )
 from proofmark.blackboard import Blackboard
 from proofmark.orchestrator import Coordinator, Phase, RECON_ROLE, EXPLOIT_ROLE
@@ -121,6 +121,7 @@ def _load_config_cb(ctx, param, value):
 @click.option("--suppress", "suppress_titles", multiple=True, help="A finding title to treat as a known false positive and never report. Repeatable.")
 @click.option("--strategy", type=click.Choice(["single", "graph"]), default="single", show_default=True, help="single agent, or a recon->exploit graph of agents.")
 @click.option("--time-budget", default=600, show_default=True, help="Wall-clock cap, seconds.")
+@click.option("--scan-mode", type=click.Choice(["quick", "standard", "deep"]), default=None, help="Preset depth: quick (fast/CI), standard, or deep. Explicit --max-steps/--time-budget/--strategy override it.")
 @click.option("--rps", default=0.0, show_default=True, help="Max requests/second to the target (0 = unlimited). Use e.g. 5 to be gentle on production.")
 @click.option("-o", "--output", default="", help="Also write the Markdown report here.")
 @click.option("--sarif", default="", help="Also write findings as SARIF 2.1.0 to this path (feeds CI / GitHub code scanning).")
@@ -132,7 +133,7 @@ def _load_config_cb(ctx, param, value):
 @click.option("--control-file", default="", help="Read operator steering instructions from here, one per line.")
 @click.option("--instruction", default="", help="Free-form guidance to steer the agent: scope, focus areas, rules of engagement.")
 @click.option("--instruction-file", default="", help="Read agent guidance from a file (scope / rules of engagement / exclusions).")
-def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file, instruction, instruction_file):
+def scan(target, authorized, operator, model, recon_model, exploit_model, api_base, allow_hosts, base_url, strategy, max_steps, safe_mode, auth_headers_raw, auth_cookies_raw, second_headers_raw, second_cookies_raw, second_identity_label, login_url, username, password, login_user_field, login_pass_field, login_json, suppress_titles, time_budget, rps, output, sarif, fail_on, baseline, update_baseline, run_dir, events_file, control_file, instruction, instruction_file, scan_mode):
     """Run the agent against a target and report what it can prove."""
     instruction_text = (instruction or "").strip()
     if instruction_file:
@@ -141,6 +142,16 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
         except OSError as exc:
             _fail(f"could not read --instruction-file {instruction_file}: {exc}")
         instruction_text = (instruction_text + "\n\n" + _extra).strip() if instruction_text else _extra
+    if scan_mode:
+        _ctx = click.get_current_context()
+        _ms, _tb, _st = {"quick": (15, 300, "single"), "standard": (40, 600, "single"),
+                         "deep": (80, 1800, "graph")}[scan_mode]
+        if _ctx.get_parameter_source("max_steps").name == "DEFAULT":
+            max_steps = _ms
+        if _ctx.get_parameter_source("time_budget").name == "DEFAULT":
+            time_budget = _tb
+        if _ctx.get_parameter_source("strategy").name == "DEFAULT":
+            strategy = _st
     cfg = RunConfig(
         target=target, kind=_classify(target), model=model,
         recon_model=recon_model, exploit_model=exploit_model, api_base=api_base,
@@ -317,6 +328,8 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
                     JwtAttackTool(), GraphQLTool(client), CorsTool(client), CsrfTool(client),
                     NoSqlInjectionTool(client), SubdomainTakeoverTool(client),
                     PrototypePollutionTool(client), RaceConditionTool(client),
+                    SessionFixationTool(client),
+                    *([DeserializationTool(client, oob)] if oob else [DeserializationTool(client)]),
                     CoverageTool(CoverageBoard()),
                     RunCommandTool(sandbox),
                     XssTool(browser),

@@ -29,6 +29,8 @@ from proofmark.tools.nosql_tool import NoSqlInjectionTool
 from proofmark.tools.takeover_tool import SubdomainTakeoverTool
 from proofmark.tools.protopollution_tool import PrototypePollutionTool
 from proofmark.tools.race_tool import RaceConditionTool
+from proofmark.tools.deserialization_tool import DeserializationTool
+from proofmark.tools.session_tool import SessionFixationTool
 
 __all__ = [
     "Tool", "ToolRegistry", "ToolResult",
@@ -42,4 +44,5 @@ __all__ = [
     "JwtAttackTool", "XxeTool", "GraphQLTool", "XssTool", "CoverageTool",
     "CorsTool", "CsrfTool", "NoSqlInjectionTool", "SubdomainTakeoverTool",
     "PrototypePollutionTool", "RaceConditionTool",
+    "DeserializationTool", "SessionFixationTool",
 ]

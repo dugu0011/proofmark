@@ -26,3 +26,11 @@ def test_instruction_file_is_read(tmp_path):
     r = CliRunner().invoke(main, ["scan", "-t", "https://app.test", "--instruction-file", str(f)])
     assert "could not read" not in r.output.lower()
     assert "refused" in r.output.lower() or "authorized" in r.output.lower()
+
+
+def test_scan_mode_accepted():
+    from click.testing import CliRunner
+    from proofmark.cli import main
+    r = CliRunner().invoke(main, ["scan", "-t", "https://app.test", "--scan-mode", "quick"])
+    assert "no such option" not in r.output.lower()
+    assert "refused" in r.output.lower() or "authorized" in r.output.lower()
