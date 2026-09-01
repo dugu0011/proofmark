@@ -16,7 +16,7 @@ def test_load_json_and_flatten_login(tmp_path):
                              "rps": 5, "login": {"url": "https://app.test/login",
                                                  "username": "you", "password": "pw"}}))
     cfg = load_config(str(p))
-    assert cfg["target"] == "https://app.test"
+    assert cfg["target"] == ["https://app.test"]
     assert cfg["model"] == "azure/gpt-4.1" and cfg["rps"] == 5
     assert cfg["login_url"] == "https://app.test/login"     # flattened
     assert cfg["username"] == "you" and cfg["password"] == "pw"
@@ -52,5 +52,5 @@ def test_yaml_config_if_pyyaml_present(tmp_path):
     p = tmp_path / "c.yaml"
     p.write_text("target: https://app.test\nrps: 3\nlogin:\n  url: https://app.test/login\n  username: u\n")
     cfg = load_config(str(p))
-    assert cfg["target"] == "https://app.test" and cfg["rps"] == 3
+    assert cfg["target"] == ["https://app.test"] and cfg["rps"] == 3
     assert cfg["login_url"] == "https://app.test/login" and cfg["username"] == "u"

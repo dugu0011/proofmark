@@ -40,6 +40,10 @@ def load_config(path: str) -> dict:
     if not isinstance(data, dict):
         raise ConfigError(f"config {path} must be a mapping of option -> value.")
 
+    # --target is a repeatable (multiple) option now, so a scalar target in the
+    # config must become a one-element list to populate it via default_map.
+    if isinstance(data.get("target"), str):
+        data["target"] = [data["target"]]
     login = data.pop("login", None)
     if isinstance(login, dict):
         if "url" in login:
