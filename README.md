@@ -7,10 +7,10 @@
 <p><b>Autonomous agents that run your app in a sandbox, exploit it, and validate every finding with a reproduced proof-of-concept</b> — never a false positive from a static scanner.</p>
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.18.0-4f8cff?style=flat-square" />
+  <img alt="version" src="https://img.shields.io/badge/version-0.19.0-4f8cff?style=flat-square" />
   <img alt="license" src="https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square" />
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-4f8cff?style=flat-square" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-239%20passing-22c55e?style=flat-square" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-245%20passing-22c55e?style=flat-square" />
   <img alt="providers" src="https://img.shields.io/badge/LLM-OpenAI%20%C2%B7%20Anthropic%20%C2%B7%20Azure-22d3ee?style=flat-square" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-7c5cff?style=flat-square" />
 </p>
@@ -196,6 +196,21 @@ proof-of-concept and fix:
 That is the *expected* result when nothing exploitable is reachable — it means the
 agent could not prove an exploit, not that none exists. To test an app that sits
 behind a WAF, scan its **local instance** or its **source code** (see [Usage](#usage--what-you-can-test)).
+
+## Connect your own MCP servers
+
+Give the agent extra tools from any MCP server. List servers in `~/.proofmark/mcp-servers.json` (or `$PROOFMARK_MCP_CONFIG`) — each is a local `stdio` server Proofmark launches, or a remote `http` one:
+
+```json
+[
+  {"name":"local_fs","transport":"stdio","command":"npx",
+   "args":["-y","@modelcontextprotocol/server-filesystem","/path/to/project"]},
+  {"name":"github","transport":"http","url":"https://api.githubcopilot.com/mcp/",
+   "auth":{"kind":"bearer","token":"your-token"},"allowed_tools":["list_issues"]}
+]
+```
+
+Their tools are namespaced `<server>_<tool>` and offered alongside the built-ins. `allowed_tools` restricts which are exposed; a server that fails to connect is skipped. Needs `pip install 'proofmark[mcp]'`. (Proofmark is also an MCP *server* — see `proofmark mcp`.)
 
 ## Local web viewer
 

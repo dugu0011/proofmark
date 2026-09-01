@@ -333,6 +333,7 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
             _fail(str(exc))
 
     click.echo(f"{C['dim']}starting sandbox…{C['reset']}")
+    _mcp_mgr = None
     try:
         with Sandbox() as sandbox:
             req_log = RequestLog()
@@ -399,6 +400,10 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
             if instruction_text:
                 suffix = (suffix + "\n\n## Operator instruction (scope / focus — follow this)\n"
                           + instruction_text).strip()
+            from proofmark import mcp_client as _mcpc
+            _mcp_extra, _mcp_mgr = _mcpc.load_tools()
+            if _mcp_extra:
+                tools = list(tools) + _mcp_extra
             llm = LLM(model, api_base=api_base)
             run_target = source.label if source else target
             started_at = datetime.now(timezone.utc).isoformat()
@@ -454,6 +459,8 @@ def scan(target, authorized, operator, model, recon_model, exploit_model, api_ba
     finally:
         if source is not None:
             source.dispose()
+        if _mcp_mgr is not None:
+            _mcp_mgr.close()
 
     if _events_fh is not None:
         _events_fh.close()
